@@ -2,7 +2,9 @@ import express, { urlencoded } from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import dotenv from "dotenv";
-import connectDB from "./config/db.js";
+import connectDB from "./src/config/db.js";
+import authRoutes from "./src/routes/authRoutes.js"
+import userRoutes from "./src/routes/userRoutes.js"
 
 dotenv.config();
 
@@ -23,10 +25,13 @@ app.get("/", (req, res)=>{
     message: "Hello ji",
     success: true
   })
-})
+});
+
+app.use("/auth", authRoutes);
+app.use("/user", userRoutes);
 
 
-const PORT = process.env.PORT || 5173;
+const PORT = process.env.PORT || 5000;
 
 // console.log("mongo start")
 
