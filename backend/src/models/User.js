@@ -21,7 +21,6 @@ const userSchema = new mongoose.Schema({
   },
   name:{
     type:String,
-    required:true,
     trim:true,
   },
   bio:{
@@ -58,7 +57,7 @@ const userSchema = new mongoose.Schema({
   ],
   comments:[{
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Post",
+      ref: "Comments",
     }],
   
 },

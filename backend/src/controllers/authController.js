@@ -5,45 +5,48 @@ import jwt from "jsonwebtoken";
 
 export const register = async (req, res) => {
   try {
-    const { username, email, password, name } = req.body;
+    const { username, email, password, } = req.body;
 
-    if (!username || !email || !password || !name) {
+    if (!username || !email || !password) {
       return res.status(400).json({
         message: "All field are required",
         success: false
       })
     }
 
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedUsername = username.trim();
+
     const ExistingUser = await User.findOne({
-      $or: [{ email }, { username }],
+      $or: [{ email:normalizedEmail }, { username:normalizedUsername }],
     });
 
     if (ExistingUser) {
       return res.status(400).json({
         message: "User already exist",
-        success: fals
+        success: false
       })
     }
+
+    
 
     const hashedPassword = await bcrypt.hash(password, 13);
 
     const user = await User.create({
-      username,
-      email,
+      username:normalizedUsername,
+      email:normalizedEmail,
       password: hashedPassword,
-      name,
     })
 
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "1d" });
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "7d" });
 
     res.cookie("token", token, {
-      httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: 'strict', maxAge: 1 * 24 * 60 * 60 * 1000
+      httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: 'strict', maxAge: 7 * 24 * 60 * 60 * 1000
     });
 
     return res.status(200).json({
       message: "Account created successfully",
       success: true,
-      token,
       user: {
         id: user._id,
         username: user.username,
@@ -54,6 +57,10 @@ export const register = async (req, res) => {
 
   } catch (error) {
     console.log(error.message);
+    return res.status(500).json({
+    success: false,
+    message: "Internal server error",
+  });
   }
 }
 
@@ -68,7 +75,9 @@ export const login = async (req, res) => {
       })
     }
 
-    const user = await User.findOne({ email });
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const user = await User.findOne({ email:normalizedEmail });
 
     if (!user) {
       return res.status(400).json({
@@ -86,22 +95,21 @@ export const login = async (req, res) => {
       })
     }
 
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "1d" });
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "7d" });
 
     res.cookie("token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      sameSite: "strict",
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
     return res.status(200).json({
       message: "Login successfull",
       success: true,
-      token,
       user: {
         id: user._id,
-        usernamez: user.username,
+        username: user.username,
         email: user.email,
         name: user.name,
       }
@@ -109,6 +117,11 @@ export const login = async (req, res) => {
 
   } catch (error) {
     console.log(error.message);
+
+    return res.status(500).json({
+    success: false,
+    message: "Internal server error",
+  });
   }
 }
 
@@ -116,7 +129,7 @@ export const logout = async (req, res) => {
   res.clearCookie("token", {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    sameSite: "strict",
   });
 
 

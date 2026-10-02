@@ -10,10 +10,9 @@ const conversationSchema = new mongoose.Schema(
       },
     ],
 
-    Message: [{
+    message: [{
       type: mongoose.Schema.Types.ObjectId,
       ref: "Message",
-      default: null,
     }],
   },
   {

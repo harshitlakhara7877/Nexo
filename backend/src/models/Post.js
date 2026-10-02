@@ -9,7 +9,7 @@ const postSchema = new mongoose.Schema({
   caption: {
     type:String,
     trim: true,
-    maxlenth: 2000,
+    maxlength: 2000,
   },
   image: {
     type:String,
@@ -18,6 +18,10 @@ const postSchema = new mongoose.Schema({
   likes:[{
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
+  }],
+  comments: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Comment",
   }],
 },
 {
