@@ -3,25 +3,25 @@ import User from "../models/User.js";
 import jwt from "jsonwebtoken";
 
 
-export const register = async (req, res)=>{
+export const register = async (req, res) => {
   try {
-    const {username, email, password, name} = req.body;
+    const { username, email, password, name } = req.body;
 
-    if(!username || !email || !password || !name){
+    if (!username || !email || !password || !name) {
       return res.status(400).json({
         message: "All field are required",
         success: false
       })
     }
 
-    const ExistingUser = await User.find({
-      $or: [{email}, {username}],
+    const ExistingUser = await User.findOne({
+      $or: [{ email }, { username }],
     });
 
-    if(ExistingUser){
+    if (ExistingUser) {
       return res.status(400).json({
         message: "User already exist",
-        success: false
+        success: fals
       })
     }
 
@@ -34,21 +34,21 @@ export const register = async (req, res)=>{
       name,
     })
 
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {expiresIn: "1d"});
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "1d" });
 
     res.cookie("token", token, {
-      httpOnly:true, secure: process.env.NODE_ENV === "production",sameSite:'strict', maxAge:1*24*60*60*1000
+      httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: 'strict', maxAge: 1 * 24 * 60 * 60 * 1000
     });
 
     return res.status(200).json({
-      message:"Account created successfully",
-      success:true,
-      token, 
-      user:{
+      message: "Account created successfully",
+      success: true,
+      token,
+      user: {
         id: user._id,
-        username:user.username,
-        email:user.email,
-        name:user.name,
+        username: user.username,
+        email: user.email,
+        name: user.name,
       }
     });
 
@@ -59,34 +59,34 @@ export const register = async (req, res)=>{
 
 export const login = async (req, res) => {
   try {
-    const {email, password} = req.body;
+    const { email, password } = req.body;
 
-  if(!email || !password){
+    if (!email || !password) {
       return res.status(400).json({
         message: "All field are required",
         success: false
       })
     }
 
-    const user = await User.findOne({email});
+    const user = await User.findOne({ email });
 
-    if(!user){
+    if (!user) {
       return res.status(400).json({
         message: "Invalid email or password",
         success: false
       })
     }
 
-    const passwordMatches =  await bcrypt.compare(password, user.password);
+    const passwordMatches = await bcrypt.compare(password, user.password);
 
-    if(!passwordMatches){
+    if (!passwordMatches) {
       return res.status(400).json({
         message: "Invalid email or password",
         success: false
       })
     }
 
-    const token = jwt.sign({userId: user._id}, process.env.JWT_SECRET, {expiresIn: "1d"});
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "1d" });
 
     res.cookie("token", token, {
       httpOnly: true,
@@ -96,12 +96,12 @@ export const login = async (req, res) => {
     });
 
     return res.status(200).json({
-      message:"Login successfull",
-      success:true,
+      message: "Login successfull",
+      success: true,
       token,
-      user:{
+      user: {
         id: user._id,
-        usernamez:user.username,
+        usernamez: user.username,
         email: user.email,
         name: user.name,
       }
@@ -121,7 +121,7 @@ export const logout = async (req, res) => {
 
 
   res.json({
-    success:true,
+    success: true,
     message: "Logged out successfully"
   })
 }
