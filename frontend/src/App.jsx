@@ -7,6 +7,9 @@ import Home from './pages/Home'
 import Profile from './pages/Profile'
 import AppLayout from './components/layout/AppLayout'
 import EditProfile from './pages/EditProfile'
+import CreatePost from './pages/CreatPost'
+import Post from './pages/Post'
+import OtherProfile from './pages/OtherProfile'
 
 function App() {
 
@@ -22,7 +25,10 @@ function App() {
           
           <Route path="/home" element={<Home />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/profile/:username" element={<OtherProfile />} />
           <Route path="/profile/edit" element={<EditProfile />} />
+          <Route path="/create" element={<CreatePost />} />
+          <Route path="/post/:id" element={<Post />} />
 
           </Route>
         </Route>

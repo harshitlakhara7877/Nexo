@@ -26,11 +26,19 @@ const userSchema = new mongoose.Schema({
   bio:{
     type:String,
     default: "",
+    trim:true,
+    maxlength: 150,
   },
-  profilePicture:{
-    type:String,
+  profilePicture: {
+  url: {
+    type: String,
     default: "",
   },
+  publicId: {            // to delete the old  image from cloduinart (cloudinary.uploader.destroy(publicId))
+    type: String,
+    default: "",
+  },
+},
   followers:[
     {
       type: mongoose.Schema.Types.ObjectId,

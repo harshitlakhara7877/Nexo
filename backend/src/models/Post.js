@@ -9,11 +9,19 @@ const postSchema = new mongoose.Schema({
   caption: {
     type:String,
     trim: true,
-    maxlength: 2000,
+    maxlength: 600,
+    default: "",
   },
   image: {
-    type:String,
-    required: true
+     url: {
+        type: String,
+        required: true,
+      },
+
+      publicId: {
+        type: String,
+        required: true,
+      },
   },
   likes:[{
     type: mongoose.Schema.Types.ObjectId,

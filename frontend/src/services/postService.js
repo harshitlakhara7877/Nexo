@@ -5,3 +5,10 @@ export const getFeed = async () => {
 
     return response.data;
 }
+
+
+export const createPost = async (formData) => {
+  const response = await api.post("/post/create", formData);
+
+  return response.data;
+};

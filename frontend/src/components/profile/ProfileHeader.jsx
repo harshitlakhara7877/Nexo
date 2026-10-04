@@ -27,7 +27,7 @@ const ProfileHeader = ({ user, onEditProfile }) => {
           <div className="flex items-center gap-5">
             <Avatar className="size-24 border-4 border-white shadow-sm sm:size-28">
               <AvatarImage
-                src={user?.profilePicture || undefined}
+                src={user?.profilePicture?.url || undefined}
                 alt={user?.username || "Profile"}
               />
 

@@ -1,5 +1,6 @@
 import cloudinary from "../config/cloudinary.js";
 import User from "../models/User.js";
+import { deleteFromCloudinary, uploadToCloudinary } from "../utils/cloudinaryUpload.js";
 
 export const getUserProfile = async (req, res) => {
   try {
@@ -39,40 +40,63 @@ export const editProfile = async (req, res) => {
       });
     }
 
+    // Update name
     if (name !== undefined) {
       user.name = name.trim();
     }
 
+    // Update bio
     if (bio !== undefined) {
       user.bio = bio.trim();
     }
 
+    // Handle profile picture
     if (req.file) {
-      const result = await new Promise((resolve, reject) => {
-        const uploadStream = cloudinary.uploader.upload_stream(
-          {
-            folder: "nexo/profile",
-            resource_type: "image",
-          },
-          (error, result) => {
-            if (error) {
-              reject(error);
-            } else {
-              resolve(result);
-            }
-          }
-        );
+      const oldPublicId = user.profilePicture?.publicId;
 
-        uploadStream.end(req.file.buffer);
+      console.log("Uploading profile picture:", {
+        originalname: req.file.originalname,
+        mimetype: req.file.mimetype,
+        size: req.file.size,
       });
 
-      user.profilePicture = result.secure_url;
-    }
+      // Upload new image
+      const result = await uploadToCloudinary(
+        req.file.buffer,
+        "nexo/profilePictures"
+      );
 
-    await user.save();
+      // Save new image information
+      user.profilePicture = {
+        url: result.secure_url,
+        publicId: result.public_id,
+      };
+
+      // Save MongoDB 
+      await user.save();
+
+      // Delete old image in background
+      if (oldPublicId) {
+        deleteFromCloudinary(oldPublicId)
+          .then(() => {
+            console.log("Old profile picture deleted:", oldPublicId);
+          })
+          .catch((error) => {
+            console.error(
+              "Failed to delete old profile picture:",
+              error
+            );
+          });
+      }
+    } else {
+      // No image change — just save profile data
+      await user.save();
+    }
 
     const updatedUser = user.toObject();
     delete updatedUser.password;
+
+    console.log("Profile updated successfully");
 
     return res.status(200).json({
       success: true,

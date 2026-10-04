@@ -12,6 +12,15 @@ export const addNewPost = async (req, res) => {
 
         if (!image) return res.status(400).json({ message: 'Image required' });
 
+        const trimmedCaption = caption?.trim() || "";
+
+        if (trimmedCaption.length > 600) {
+            return res.status(400).json({
+                success: false,
+                message: "Caption must be 600 characters or less",
+            });
+        }
+
         const optimizedImageBuffer = await sharp(image.buffer)
             .resize({
                 width: 800,
@@ -41,9 +50,14 @@ export const addNewPost = async (req, res) => {
             uploadStream.end(optimizedImageBuffer);
         });
 
+        console.log(cloudResponse);
+
         const post = await Post.create({
-            caption,
-            image: cloudResponse.secure_url,
+            caption:trimmedCaption,
+            image: {
+                url: cloudResponse.secure_url,
+                publicId: cloudResponse.public_id
+            },
             author: authorId
         });
 
@@ -59,10 +73,49 @@ export const addNewPost = async (req, res) => {
         })
 
     } catch (error) {
-        console.log(error.message);
+        console.error("Get create post error:", error);
     }
 }
 
+export const getSinglePost = async (req, res) => {
+  try {
+    const postId = req.params.id;
+
+    // Validate MongoDB ObjectId
+    // if (!mongoose.Types.ObjectId.isValid(postId)) {
+    //   return res.status(400).json({
+    //     success: false,
+    //     message: "Invalid post ID",
+    //   });
+    // }
+
+    const post = await Post.findById(postId).populate({
+      path: "author",
+      select: "username name profilePicture",
+    });
+
+    if (!post) {
+      return res.status(404).json({
+        success: false,
+        message: "Post not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      post,
+    });
+  } catch (error) {
+    console.error("Get single post error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch post",
+    });
+  }
+};
+
+//feed
 export const getAllPosts = async (req, res) => {
     try {
         const posts = await Post.find().sort({ createdAt: -1 })
@@ -151,7 +204,12 @@ export const dislikePost = async (req, res) => {
         })
 
     } catch (error) {
-        console.log(error.message)
+        console.error("Get all posts error:", error);
+
+  return res.status(500).json({
+    success: false,
+    message: "Failed to fetch posts",
+  });
     }
 }
 
@@ -234,7 +292,7 @@ export const deletePost = async (req, res) => {
         const post = await Post.findById(postId);
 
         if (!post) {
-            return res.status(400).json({
+            return res.status(404).json({
                 success: false,
                 message: 'Post not found'
             })
@@ -242,11 +300,13 @@ export const deletePost = async (req, res) => {
 
         // check if the logged-in user is the owner of post
         if (post.author.toString() !== authorId.toString()) {
-            return res.status(400).json({
+            return res.status(403).json({
                 success: false,
                 message: 'You are not authorize to delete this post'
             })
         }
+
+        const publicId = post.image?.publicId;
 
         // delete post
         await Post.findByIdAndDelete(postId);
@@ -256,6 +316,19 @@ export const deletePost = async (req, res) => {
 
         // delete associated comment with post
         await Comment.deleteMany({ post: postId });
+
+        if (publicId) {
+      try {
+        await cloudinary.uploader.destroy(publicId, {
+          resource_type: "image",
+        });
+      } catch (cloudinaryError) {
+        console.error(
+          "Failed to delete post image from Cloudinary:",
+          cloudinaryError
+        );
+      }
+    }
 
         return res.status(200).json({
             success: true,

@@ -1,63 +1,66 @@
-import { ArrowLeft, Check, Camera } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { ArrowLeft, Camera, Check } from "lucide-react";
 import { toast } from "sonner";
 
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Textarea } from "../components/ui/textarea";
-
 import { useAuth } from "../context/AuthContext";
 import { updateProfile } from "../services/userService";
 
-const MAX_BIO_LENGTH = 150;
 const MAX_NAME_LENGTH = 50;
+const MAX_BIO_LENGTH = 150;
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 
-const EditProfile = () => {
+
+export default function EditProfile() {
   const navigate = useNavigate();
   const { user, setUser } = useAuth();
 
-  const [form, setForm] = useState({
-    name: "",
-    bio: "",
-  });
+  const fileInputRef = useRef(null);
+
+  const [name, setName] = useState(user?.name || "");
+  const [bio, setBio] = useState(user?.bio || "");
+
+  const [profilePicture, setProfilePicture] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(
+    user?.profilePicture?.url || ""
+  );
 
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
 
+  /*
+   * Keep the form synchronized if the authenticated
+   * user changes while this page is mounted.
+   */
   useEffect(() => {
-    if (!user) {
-      return;
-    }
+    if (!user) return;
 
-    setForm({
-      name: user.name || "",
-      bio: user.bio || "",
-    });
+    setName(user.name || "");
+    setBio(user.bio || "");
+    setPreviewUrl(user.profilePicture?.url || "");
   }, [user]);
 
-  const initials = (
-    user?.name ||
-    user?.username ||
-    "U"
-  )
-    .charAt(0)
-    .toUpperCase();
+  /*
+   * Clean up temporary object URL when the component
+   * is unmounted or the preview changes.
+   */
+  useEffect(() => {
+    return () => {
+      if (previewUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
 
-  const handleChange = (event) => {
-    const { name, value } = event.target;
-
-    setForm((previous) => ({...previous,[name]: value}));
-
-    setErrors((previous) => ({...previous,[name]: ""}));
-  };
-
-  const validate = () => {
+  const validateForm = () => {
     const newErrors = {};
 
-    const trimmedName = form.name.trim();
-    const trimmedBio = form.bio.trim();
+    const trimmedName = name.trim();
+    const trimmedBio = bio.trim();
 
     if (!trimmedName) {
       newErrors.name = "Name is required";
@@ -74,36 +77,121 @@ const EditProfile = () => {
     return Object.keys(newErrors).length === 0;
   };
 
+  const handleImageChange = (event) => {
+    const file = event.target.files?.[0];
+
+    if (!file) return;
+
+    const ALLOWED_IMAGE_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/jpg",
+  "image/webp",
+];
+
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      toast.error("Only JPG, PNG, JPEG, and WebP images are allowed");
+
+      event.target.value = "";
+      return;
+    }
+
+    if (file.size > MAX_IMAGE_SIZE) {
+      toast.error("Profile image must be smaller than 5 MB");
+
+      event.target.value = "";
+      return;
+    }
+
+    /*
+     * Revoke the previous temporary preview URL.
+     */
+    if (previewUrl?.startsWith("blob:")) {
+      URL.revokeObjectURL(previewUrl);
+    }
+
+    const newPreviewUrl = URL.createObjectURL(file);
+
+    setProfilePicture(file);
+    setPreviewUrl(newPreviewUrl);
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
 
-    if (!validate()) {
+    if (saving) return;
+
+
+    if (!validateForm()) {
       return;
     }
 
     try {
       setSaving(true);
+      setErrors({});
 
-      const data = await updateProfile({
-        name: form.name.trim(),
-        bio: form.bio.trim(),
-      });
+      /*
+       * Use FormData because we may be
+       * sending an image file.
+       */
+      const formData = new FormData();
 
-      setUser(data.user);
+      formData.append("name", name.trim());
+      formData.append("bio", bio.trim());
+
+      if (profilePicture) {
+        formData.append("profilePicture", profilePicture);
+      }
+
+      const data = await updateProfile(formData);
+
+      /*
+       * Update AuthContext so the new profile
+       * information is immediately available
+       * throughout the application.
+       */
+      if (data?.user) {
+        setUser(data.user);
+      }
 
       toast.success("Profile updated successfully");
 
       navigate("/profile");
     } catch (error) {
+      console.error("Profile update error:", error);
+
       const responseData = error.response?.data;
 
+      /*
+       * Backend validation errors.
+       */
       if (responseData?.errors) {
         setErrors(responseData.errors);
+
+        if (responseData.errors.name) {
+          toast.error(responseData.errors.name);
+        } else if (responseData.errors.bio) {
+          toast.error(responseData.errors.bio);
+        } else {
+          toast.error("Please check your profile information");
+        }
+
+        return;
       }
 
+      /*
+       * Multer file-size error.
+       */
+      if (error.response?.status === 413) {
+        toast.error("Profile image is too large");
+        return;
+      }
+
+      /*
+       * Generic API error.
+       */
       toast.error(
-        responseData?.message ||
-          "Failed to update profile"
+        responseData?.message || "Failed to update profile"
       );
     } finally {
       setSaving(false);
@@ -111,89 +199,99 @@ const EditProfile = () => {
   };
 
   const handleCancel = () => {
+    if (saving) return;
+
     navigate("/profile");
   };
 
-  if (!user) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-[#F7F6F3]">
-        <p className="text-sm text-[#686A72]">
-          Unable to load profile.
-        </p>
-      </main>
-    );
-  }
 
   return (
-    <main className="min-h-screen bg-[#F7F6F3] px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-2xl">
-
+    <div className="min-h-screen bg-[#F7F6F3] px-4 py-6">
+      <div className="mx-auto w-full max-w-2xl">
         {/* Header */}
-        <div className="mb-5 flex items-center gap-3">
+        <div className="mb-6 flex items-center gap-3">
           <Button
             type="button"
             variant="ghost"
             size="icon"
             onClick={handleCancel}
-            className="rounded-full"
+            disabled={saving}
+            className="text-[#1B1C20] hover:bg-white"
           >
-            <ArrowLeft size={19} />
+            <ArrowLeft className="h-5 w-5" />
           </Button>
 
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-[#1B1C20]">
+            <h1 className="text-xl font-semibold text-[#1B1C20]">
               Edit Profile
             </h1>
 
-            <p className="mt-1 text-sm text-[#686A72]">
-              Update your Nexo profile.
+            <p className="text-sm text-[#686A72]">
+              Update your Nexo profile information
             </p>
           </div>
         </div>
 
-        {/* Form card */}
+        {/* Form Card */}
         <form
           onSubmit={handleSubmit}
-          className="overflow-hidden rounded-2xl border border-[#E4E1DB] bg-white"
+          className="rounded-2xl border border-[#E4E1DB] bg-white p-6 shadow-sm"
         >
-          <div className="space-y-7 p-5 sm:p-8">
+          {/* Profile Image */}
+          <div className="border-b border-[#EEECE8] pb-6">
+            <div className="mb-4">
+              <h2 className="text-sm font-semibold text-[#1B1C20]">
+                Profile photo
+              </h2>
 
-            {/* Profile photo */}
+              <p className="mt-1 text-sm text-[#686A72]">
+                Choose a profile picture for your Nexo account.
+              </p>
+            </div>
+
             <div className="flex items-center gap-5">
-              <Avatar className="size-20 border-4 border-white shadow-sm">
+              <Avatar className="h-24 w-24">
                 <AvatarImage
-                  src={user.profilePicture || undefined}
-                  alt={user.username}
+                  src={previewUrl || undefined}
+                  alt={user?.username || "Profile"}
                 />
 
                 <AvatarFallback className="bg-[#FFF0E8] text-xl font-semibold text-[#FF4D00]">
-                  {initials}
+                  {user?.name?.charAt(0)?.toUpperCase() || "N"}
                 </AvatarFallback>
               </Avatar>
 
               <div>
-                <p className="text-sm font-medium text-[#1B1C20]">
-                  Profile photo
-                </p>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/jpg,image/webp"
+                  className="hidden"
+                  onChange={handleImageChange}
+                  disabled={saving}
+                />
 
                 <Button
                   type="button"
                   variant="outline"
-                  disabled
-                  className="mt-2 border-[#FF4D00] text-[#FF4D00]"
+                  disabled={saving}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="border-[#E4E1DB] text-[#1B1C20] hover:bg-[#F7F6F3]"
                 >
-                  <Camera size={16} />
-                  Change Photo
+                  <Camera className="mr-2 h-4 w-4" />
+                  Change photo
                 </Button>
 
-                <p className="mt-1.5 text-xs text-[#9A9CA3]">
-                  Photo upload will be available in Phase 6.
+                <p className="mt-2 text-xs text-[#9A9CA3]">
+                  JPG, PNG, JPEG or WebP · Max 5 MB
                 </p>
               </div>
             </div>
+          </div>
 
-            {/* Name */}
-            <div className="space-y-2">
+          {/* Name */}
+          <div className="mt-6 space-y-2">
+            <div className="flex items-center justify-between">
               <label
                 htmlFor="name"
                 className="text-sm font-medium text-[#1B1C20]"
@@ -201,99 +299,112 @@ const EditProfile = () => {
                 Name
               </label>
 
-              <Input
-                id="name"
-                name="name"
-                value={form.name}
-                onChange={handleChange}
-                maxLength={MAX_NAME_LENGTH}
-                placeholder="Enter your name"
-                className="h-11 border-[#E4E1DB] focus-visible:border-[#FF4D00] focus-visible:ring-[#FF4D00]/20"
-              />
-
-              {errors.name && (
-                <p className="text-xs text-[#D94B4B]">
-                  {errors.name}
-                </p>
-              )}
+              <span className="text-xs text-[#9A9CA3]">
+                {name.length}/{MAX_NAME_LENGTH}
+              </span>
             </div>
 
-            {/* Username */}
-            <div className="space-y-2">
+            <Input
+              id="name"
+              value={name}
+              maxLength={MAX_NAME_LENGTH}
+              disabled={saving}
+              placeholder="Your name"
+              onChange={(event) => {
+                setName(event.target.value);
+
+                if (errors.name) {
+                  setErrors((previous) => ({
+                    ...previous,
+                    name: "",
+                  }));
+                }
+              }}
+              className={`border-[#E4E1DB] bg-white text-[#1B1C20] placeholder:text-[#9A9CA3] focus-visible:ring-[#FF4D00] ${
+                errors.name ? "border-[#D94B4B]" : ""
+              }`}
+            />
+
+            {errors.name && (
+              <p className="text-sm text-[#D94B4B]">
+                {errors.name}
+              </p>
+            )}
+          </div>
+
+          {/* Username */}
+          <div className="mt-5 space-y-2">
+            <label
+              htmlFor="username"
+              className="text-sm font-medium text-[#1B1C20]"
+            >
+              Username
+            </label>
+
+            <Input
+              id="username"
+              value={user?.username || ""}
+              disabled
+              className="border-[#E4E1DB] bg-[#F7F6F3] text-[#686A72]"
+            />
+
+            <p className="text-xs text-[#9A9CA3]">
+              Username cannot be changed here.
+            </p>
+          </div>
+
+          {/* Bio */}
+          <div className="mt-5 space-y-2">
+            <div className="flex items-center justify-between">
               <label
-                htmlFor="username"
+                htmlFor="bio"
                 className="text-sm font-medium text-[#1B1C20]"
               >
-                Username
+                Bio
               </label>
 
-              <div className="relative">
-                <Input
-                  id="username"
-                  value={user.username || ""}
-                  disabled
-                  className="h-11 border-[#E4E1DB] bg-[#F7F6F3] pr-10 text-[#686A72]"
-                />
+              <span className="text-xs text-[#9A9CA3]">
+                {bio.length}/{MAX_BIO_LENGTH}
+              </span>
+            </div>
 
-                <Check
-                  size={17}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#2E9E6F]"
-                />
-              </div>
+            <Textarea
+              id="bio"
+              value={bio}
+              maxLength={MAX_BIO_LENGTH}
+              disabled={saving}
+              placeholder="Tell people a little about yourself..."
+              rows={4}
+              onChange={(event) => {
+                setBio(event.target.value);
 
-              <p className="text-xs text-[#9A9CA3]">
-                Username cannot be changed here.
+                if (errors.bio) {
+                  setErrors((previous) => ({
+                    ...previous,
+                    bio: "",
+                  }));
+                }
+              }}
+              className={`resize-none border-[#E4E1DB] bg-white text-[#1B1C20] placeholder:text-[#9A9CA3] focus-visible:ring-[#FF4D00] ${
+                errors.bio ? "border-[#D94B4B]" : ""
+              }`}
+            />
+
+            {errors.bio && (
+              <p className="text-sm text-[#D94B4B]">
+                {errors.bio}
               </p>
-            </div>
-
-            {/* Bio */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label
-                  htmlFor="bio"
-                  className="text-sm font-medium text-[#1B1C20]"
-                >
-                  Bio
-                </label>
-
-                <span
-                  className={`text-xs ${
-                    form.bio.length > MAX_BIO_LENGTH
-                      ? "text-[#D94B4B]"
-                      : "text-[#9A9CA3]"
-                  }`}
-                >
-                  {form.bio.length}/{MAX_BIO_LENGTH}
-                </span>
-              </div>
-
-              <Textarea
-                id="bio"
-                name="bio"
-                value={form.bio}
-                onChange={handleChange}
-                maxLength={MAX_BIO_LENGTH}
-                placeholder="Tell people a little about yourself..."
-                rows={4}
-                className="resize-none border-[#E4E1DB] focus-visible:border-[#FF4D00] focus-visible:ring-[#FF4D00]/20"
-              />
-
-              {errors.bio && (
-                <p className="text-xs text-[#D94B4B]">
-                  {errors.bio}
-                </p>
-              )}
-            </div>
+            )}
           </div>
 
           {/* Actions */}
-          <div className="flex flex-col-reverse gap-3 border-t border-[#EEECE8] bg-[#FCFBF9] p-5 sm:flex-row sm:justify-end sm:p-6">
+          <div className="mt-8 flex flex-col-reverse gap-3 border-t border-[#EEECE8] pt-6 sm:flex-row sm:justify-end">
             <Button
               type="button"
               variant="outline"
               onClick={handleCancel}
               disabled={saving}
-              className="border-[#E4E1DB]"
+              className="border-[#E4E1DB] text-[#1B1C20] hover:bg-[#F7F6F3]"
             >
               Cancel
             </Button>
@@ -301,15 +412,24 @@ const EditProfile = () => {
             <Button
               type="submit"
               disabled={saving}
-              className="bg-[#FF4D00] text-white hover:bg-[#E64400]"
+              className="bg-[#FF4D00] text-white hover:bg-[#D9430A]"
             >
-              {saving ? "Saving..." : "Save Changes"}
+              {saving ? (
+                <>
+                  <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Check className="mr-2 h-4 w-4" />
+                  Save Changes
+                </>
+              )}
             </Button>
           </div>
         </form>
       </div>
-    </main>
+    </div>
   );
-};
+}
 
-export default EditProfile;
