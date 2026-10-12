@@ -56,7 +56,7 @@ export default function PostFeed() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [posts.length]);
+  }, []);
 
   useEffect(() => {
     fetchPosts();

@@ -8,11 +8,12 @@ import {
   User,
   LogOut,
   PlusSquare,
+  TrendingUp,
 } from "lucide-react";
 
 import { useAuth } from "../../context/AuthContext";
 
-const Sidebar = () => {
+const Sidebar = (isFixed) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -30,6 +31,11 @@ const Sidebar = () => {
     {
       name: "Explore",
       path: "/explore",
+      icon: TrendingUp,
+    },
+    {
+      name: "Search",
+      path: "/Search",
       icon: Search,
     },
     {
@@ -55,7 +61,7 @@ const Sidebar = () => {
   ];
 
   return (
-    <div className="fixed top-0 left-0  flex h-screen w-64 flex-col border-r bg-white px-5 py-6">
+    <div className={`top-0 left-0  flex h-screen w-64 flex-col border-r bg-white px-5 py-6 ${isFixed ? "fixed" : ""}`}>
       {/* Logo */}
       <NavLink
         to="/home"

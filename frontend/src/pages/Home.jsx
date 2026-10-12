@@ -8,12 +8,12 @@ const Home = () => {
   const [error, setError] = useState("");
 
   return (
-    <div className="p-6">
+    <div className="p-6 ml-20">
       <h1 className="text-2xl font-bold">
         Home
       </h1>
 
-      <div className="w-full flex flex-col mx-auto justify-center max-w-2xl mt-6 space-y-6">
+      <div className="w-full flex flex-col mx-auto  justify-center max-w-2xl mt-6 space-y-6">
         <PostFeed />
       </div>
     </div>

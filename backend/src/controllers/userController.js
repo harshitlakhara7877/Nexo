@@ -144,9 +144,20 @@ export const getUserbyUsername = async (req, res) => {
 
 export const getSuggesetedUsers = async (req, res) => {
   try {
+    const author = await User.findById(req.id).select("following").lean();
+
+    if(!author){
+      return res.status(404).json({
+        success:false,
+        message:"User not auhtorized"
+      })
+    }
+
+    const excludedIds = [req.id, ...(author.following || [])];
+
     const suggestedUsers = await User.find({
-      _id: { $ne: req.id },
-    }).select("-password");
+      _id: { $nin:excludedIds },
+    }).select("username profilePicture").limit(10).lean();
 
     return res.status(200).json({
       success: true,
@@ -204,6 +215,8 @@ export const followOrUnfollow = async (req, res) => {
       return res.status(200).json({
         message: "Unfollowed successfully",
         success: true,
+        isFollowing: false,
+        followersCount: Math.max(targetUser.followers.length - 1, 0),
       });
     }
 
@@ -222,6 +235,8 @@ export const followOrUnfollow = async (req, res) => {
     return res.status(200).json({
       message: "Followed successfully",
       success: true,
+      isFollowing:true,
+      followersCount:targetUser.followers.length + 1,
     });
   } catch (error) {
     console.error("Follow/unfollow error:", error);

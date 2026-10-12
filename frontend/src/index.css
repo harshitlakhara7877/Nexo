@@ -13,6 +13,18 @@ body {
   font-family: Inter, system-ui, sans-serif;
 }
 
+/* Blue background for all Sonner toasts */
+/* [data-sonner-toast] {
+  background: #0c0684 !important;
+  color: #07057a !important;
+  border: 1px solid #0c0684 !important;
+}
+
+[data-sonner-toast] [data-title],
+[data-sonner-toast] [data-description] {
+  color: #ffffff !important;
+} */
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
