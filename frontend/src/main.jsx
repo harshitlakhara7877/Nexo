@@ -16,3 +16,12 @@ createRoot(document.getElementById('root')).render(
     </BrowserRouter>
   </StrictMode>,
 )
+
+
+// feat: create reusable card component for UI consistency
+
+// feat: implement explore page to display user posts with interaction options
+
+// feat: add search functionality for users and posts
+
+// feat: create bookmarks page to manage saved posts
