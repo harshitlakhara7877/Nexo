@@ -22,6 +22,4 @@ createRoot(document.getElementById('root')).render(
 
 // feat: implement explore page to display user posts with interaction options
 
-// feat: add search functionality for users and posts
-
 // feat: create bookmarks page to manage saved posts

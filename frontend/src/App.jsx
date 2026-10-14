@@ -14,6 +14,7 @@ import Explore from "./pages/Explore";
 import Search from "./pages/Search";
 import Settings from "./components/profile/Settings";
 import Bookmarks from "./components/Settings/Bookmarks";
+import Messages from "./pages/Message";
 
 function App() {
   return (
@@ -23,11 +24,12 @@ function App() {
         <Route path="/login" element={<Login />} />
 
         <Route element={<ProtectedRoute />}>
-          <Route path="/explore" element={<Explore />} />
 
           <Route element={<AppLayout />}>
             <Route path="/home" element={<Home />} />
+            <Route path="/explore" element={<Explore />} />
             <Route path="/search" element={<Search />} />
+            <Route path="/messages" element={<Messages />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/bookmarks" element={<Bookmarks />} />

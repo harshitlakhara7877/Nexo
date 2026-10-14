@@ -20,11 +20,26 @@ const messageSchema = new mongoose.Schema(
       maxlength: 2000,
       required:true,
     },
+    
+    isRead: {
+      type:Boolean,
+      default:false,
+    },
+
+    readAt: {
+      type: Date,
+      default: null,
+    }
   },
   {
     timestamps: true,
   }
 );
+
+messageSchema.index({
+  conversation: 1,
+  createdAt: 1,
+})
 
 const Message = mongoose.model("Message", messageSchema);
 
