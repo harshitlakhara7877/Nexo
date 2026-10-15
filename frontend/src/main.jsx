@@ -18,8 +18,16 @@ createRoot(document.getElementById('root')).render(
 )
 
 
-// feat: create reusable card component for UI consistency
 
-// feat: implement explore page to display user posts with interaction options
+// feat: add emoji picker and voice message functionality to chat window
 
-// feat: create bookmarks page to manage saved posts
+// feat: implement chat details and report/delete dialogs
+
+// feat: create user report model and API endpoints for reporting users
+
+// feat: enhance message service with delete conversation and report user functions
+
+// chore: update package.json to include emoji-picker-react dependency
+
+
+

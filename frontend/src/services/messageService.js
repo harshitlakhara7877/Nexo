@@ -24,3 +24,14 @@ export const markConversationRead = async (userId) => {
   const response = await api.patch(`/message/read/${userId}`);
   return response.data;
 };
+
+export const deleteConversation = async (userId) => {
+  const response = await api.delete(`/message/conversations/with/${userId}`);
+  return response.data;
+};
+
+export const reportUser = async (userId, payload) => {
+  const response = await api.post(`/message/report/${userId}`,payload);
+
+  return response.data;
+};

@@ -16,6 +16,24 @@ const conversationSchema = new mongoose.Schema(
         ref: "Message",
       },
     ],
+
+    deletedChatFor: [
+      {
+        deletedFor: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          required: true,
+        },
+        deletedAt: {
+          type: Date,
+          required: true,
+        },
+        isDeleted: {
+          type: Boolean,
+          default: true,
+        },
+      },
+    ],
   },
   {
     timestamps: true,
