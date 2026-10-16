@@ -30,6 +30,7 @@ import ChatDetails from "@/components/message/ChatDetails";
 import ReportDialog from "@/components/message/ReportDialog";
 import DeleteChatDialog from "@/components/message/DeleteChatDialog";
 import EmojiPicker from "emoji-picker-react";
+import socket from "@/services/socket";
 
 const getId = (value) => String(value?._id ?? value ?? "");
 
@@ -150,6 +151,40 @@ export default function ChatWindow({
       block: "end",
     });
   }, [messages, loading]);
+
+  // handle new message and notify other user in real time
+  useEffect(() => {
+  const handleNewMessage = ({ message }) => {
+    // Ignore events that don't contain a message.
+    if (!message) return;
+
+    // Only append messages from the currently selected contact.
+    if (
+      String(getId(message.sender)) !==
+      String(selectedContact?._id)
+    ) {
+      return;
+    }
+
+    setMessages((current) => {
+      // Prevent the same message from appearing twice.
+      const alreadyExists = current.some(
+        (item) => String(item._id) === String(message._id)
+      );
+
+      if (alreadyExists) return current;
+
+      return [...current, message];
+    });
+  };
+
+  socket.on("message:new", handleNewMessage);
+
+  return () => {
+    socket.off("message:new", handleNewMessage);
+  };
+}, [selectedContact?._id]);
+
 
   const handleSend = async (event) => {
     event.preventDefault();

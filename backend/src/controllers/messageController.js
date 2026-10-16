@@ -44,8 +44,7 @@ const getVisibleMessageFilter = (conversation, userId) => {
 };
 
 // Escape regex characters so searches treat input as literal text.
-const escapeRegex = (value) =>
-  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 
 export const getConversations = async (req, res) => {
@@ -398,6 +397,14 @@ export const sendMessage = async (req, res) => {
       select: "username name profilePicture",
     });
 
+    // Notify the recipient after the message has been saved.
+    const io = req.app.get("io");
+
+    io?.to(`user:${receiverId}`).emit("message:new", {
+      conversationId: String(conversation._id),
+      message: newMessage,
+    });
+
     return res.status(201).json({
       success: true,
       message: "Message sent successfully.",
@@ -521,7 +528,16 @@ export const markConversationRead = async (req, res) => {
       }
     );
 
-    return res.status(200).json({
+    if(result.modifiedCount > 0){
+      const io = req.app.get("io");
+
+      io?.to(`user:${receiverId}`).emit("message:read", {
+        conversationId: String(conversation._id),
+        messageIds: messageIds.map(String),
+        readAt,
+      });  
+    }
+          return res.status(200).json({
       success: true,
       modifiedCount: result.modifiedCount,
     });

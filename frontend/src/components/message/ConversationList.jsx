@@ -15,6 +15,7 @@ import {
   getConversations,
   searchMessagePeople,
 } from "@/services/messageService";
+import socket from "@/services/socket";
 
 const getId = (value) => String(value?._id ?? value ?? "");
 
@@ -58,6 +59,8 @@ function UserAvatar({ user }) {
     </span>
   );
 }
+
+
 
 export default function ConversationList({
   selectedContact,
@@ -106,6 +109,19 @@ export default function ConversationList({
   useEffect(() => {
     loadConversations();
   }, [loadConversations, refreshKey]);
+
+
+  useEffect(() => {
+  const handleNewMessage = () => {
+    refreshKey();
+  };
+
+  socket.on("message:new", handleNewMessage);
+
+  return () => {
+    socket.off("message:new", handleNewMessage);
+  };
+}, [refreshKey]);
 
   // Debounced people search.
   useEffect(() => {
