@@ -7,16 +7,27 @@ import authRoutes from "./src/routes/authRoutes.js"
 import userRoutes from "./src/routes/userRoutes.js"
 import messageRoutes from "./src/routes/messageRoutes.js";
 import postRoutes from "./src/routes/postRoutes.js";
+import { initializeSocket } from "./src/socket/socket.js";
+import http from "http"
 dotenv.config();
 
-
 const app = express();
+
+// Create one HTTP server for Express and Socket.IO.
+const server = http.createServer(app);
+
+// Attach Socket.IO to that SAME server.
+const io = initializeSocket(server);
+
+// Make io available to controllers later.
+app.set("io", io);
+
 
 app.use(express.json());
 app.use(cookieParser());
 app.use(urlencoded({extended: true}));
 app.use(cors({
-  origin:'http://localhost:5173',
+  origin:process.env.CLIENT_ORIGIN,
   credentials: true
 }))
 
@@ -40,6 +51,6 @@ const PORT = process.env.PORT || 5000;
 
 await connectDB();
 
-app.listen(PORT, ()=>{
+server.listen(PORT, ()=>{
   console.log(`server is running on https://localhost:${PORT}`)
 });

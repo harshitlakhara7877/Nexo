@@ -23,9 +23,10 @@ createRoot(document.getElementById('root')).render(
 
 // feat: implement chat details and report/delete dialogs
 
-// feat: create user report model and API endpoints for reporting users
+
 
 // feat: enhance message service with delete conversation and report user functions
+// feat: integrate Socket.IO for real-time communication i
 
 // chore: update package.json to include emoji-picker-react dependency
 
