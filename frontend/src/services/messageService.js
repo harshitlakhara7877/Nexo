@@ -10,8 +10,17 @@ export const getMessages = async (userId) => {
   return response.data;
 };
 
-export const sendMessage = async (receiverId, message) => {
-  const response = await api.post(`/message/send/${receiverId}`,{ message });
+export const sendMessage = async (receiverId, content) => {
+  const payload =
+    content instanceof FormData
+      ? content
+      : { message: content };
+
+  const response = await api.post(
+    `/message/send/${receiverId}`,
+    payload
+  );
+
   return response.data;
 };
 

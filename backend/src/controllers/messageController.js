@@ -4,6 +4,7 @@ import Conversation from "../models/Conversation.js";
 import Message from "../models/Message.js";
 import User from "../models/User.js";
 import UserReport from "../models/UserReport.js";
+import { deleteFromCloudinary, uploadToCloudinary } from "../utils/cloudinaryUpload.js";
 
 const isValidId = (id) => mongoose.isValidObjectId(id);
 
@@ -51,9 +52,6 @@ export const getConversations = async (req, res) => {
   try {
     const currentUserId = req.id;
 
-    // Exclude conversations hidden by this specific user.
-    // A deletion record for the other participant does not hide it
-    // from the current user.
     const conversations = await Conversation.find({
       participants: currentUserId,
       $nor: [
@@ -308,9 +306,14 @@ export const getMessage = async (req, res) => {
 // ============================================================
 
 export const sendMessage = async (req, res) => {
+  let uploadedImage = null;
+  let createdMessageId = null;
+  let conversationSaved = false;
+
   try {
     const senderId = req.id;
     const receiverId = req.params.id;
+    const imageFile = req.file;
 
     const messageText =
       typeof req.body?.message === "string"
@@ -324,10 +327,18 @@ export const sendMessage = async (req, res) => {
       });
     }
 
-    if (!messageText) {
+    if (String(senderId) === String(receiverId)) {
       return res.status(400).json({
         success: false,
-        message: "Message is required.",
+        message: "You can't message yourself.",
+      });
+    }
+
+    // Require either text or an image.
+    if (!imageFile && !messageText) {
+      return res.status(400).json({
+        success: false,
+        message: "A message or image is required.",
       });
     }
 
@@ -335,13 +346,6 @@ export const sendMessage = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Message cannot exceed 2000 characters.",
-      });
-    }
-
-    if (String(senderId) === String(receiverId)) {
-      return res.status(400).json({
-        success: false,
-        message: "You can't message yourself.",
       });
     }
 
@@ -356,6 +360,18 @@ export const sendMessage = async (req, res) => {
       });
     }
 
+    // Upload an attached image before saving the message.
+    if (imageFile) {
+      uploadedImage = await uploadToCloudinary(
+        imageFile.buffer,
+        "nexo/messages/images"
+      );
+
+      if (!uploadedImage?.secure_url || !uploadedImage?.public_id) {
+        throw new Error("Image upload did not return valid metadata.");
+      }
+    }
+
     let conversation = await Conversation.findOne(
       getConversationQuery(senderId, receiverId)
     );
@@ -368,36 +384,39 @@ export const sendMessage = async (req, res) => {
       });
     }
 
-    // Create the message.
+    // Save either a text message or an image message.
     const newMessage = await Message.create({
       conversation: conversation._id,
       sender: senderId,
+      type: imageFile ? "image" : "text",
       message: messageText,
+      ...(uploadedImage && {
+        image: {
+          url: uploadedImage.secure_url,
+          publicId: uploadedImage.public_id,
+        },
+      }),
     });
 
-    // Maintain the message references in the conversation.
+    createdMessageId = newMessage._id;
+
     conversation.message.push(newMessage._id);
 
-    /*
-     * A new message makes the conversation visible again
-     * to both participants.
-     *
-     * IMPORTANT:
-     * Do not clear deletedAt. It must remain as the user's
-     * history cutoff, so old messages stay hidden.
-     */
+    // A new message makes the conversation visible again.
+    // Preserve each participant's deletedAt history cutoff.
     for (const entry of conversation.deletedChatFor || []) {
       entry.isDeleted = false;
     }
 
     await conversation.save();
+    conversationSaved = true;
 
     await newMessage.populate({
       path: "sender",
       select: "username name profilePicture",
     });
 
-    // Notify the recipient after the message has been saved.
+    // Preserve existing real-time message delivery.
     const io = req.app.get("io");
 
     io?.to(`user:${receiverId}`).emit("message:new", {
@@ -412,6 +431,25 @@ export const sendMessage = async (req, res) => {
     });
   } catch (error) {
     console.error("Send message error:", error);
+
+    // Clean up a failed, incomplete save where possible.
+    if (!conversationSaved) {
+      if (createdMessageId) {
+        await Message.findByIdAndDelete(createdMessageId).catch(
+          (cleanupError) => {
+            console.error("Message cleanup error:", cleanupError);
+          }
+        );
+      }
+
+      if (uploadedImage?.public_id) {
+        await deleteFromCloudinary(uploadedImage.public_id).catch(
+          (cleanupError) => {
+            console.error("Image cleanup error:", cleanupError);
+          }
+        );
+      }
+    }
 
     return res.status(500).json({
       success: false,
@@ -476,25 +514,27 @@ export const searchMessagePeople = async (req, res) => {
 
 export const markConversationRead = async (req, res) => {
   try {
-    const receiverId = req.params.id;
+    // The URL contains the other participant's ID.
+    const otherUserId = req.params.id;
     const currentUserId = req.id;
 
-    if (!isValidId(receiverId)) {
+    if (!isValidId(otherUserId)) {
       return res.status(400).json({
         success: false,
         message: "Invalid user ID.",
       });
     }
 
-    if (String(currentUserId) === String(receiverId)) {
+    if (String(currentUserId) === String(otherUserId)) {
       return res.status(400).json({
         success: false,
         message: "Invalid conversation.",
       });
     }
 
+    // Only find a conversation that belongs to these two users.
     const conversation = await Conversation.findOne(
-      getConversationQuery(currentUserId, receiverId)
+      getConversationQuery(currentUserId, otherUserId)
     );
 
     if (!conversation) {
@@ -504,21 +544,41 @@ export const markConversationRead = async (req, res) => {
       });
     }
 
-    // Respect the current user's history cutoff.
+    // Respect the current user's deleted-message history cutoff.
     const messageFilter = getVisibleMessageFilter(
       conversation,
       currentUserId
     );
 
+    // First identify the unread messages sent by the other user.
+    const unreadMessages = await Message.find({
+      ...messageFilter,
+      sender: otherUserId,
+      isRead: { $ne: true },
+    })
+      .select("_id")
+      .lean();
+
+    // No unread messages means no database update or socket event.
+    if (unreadMessages.length === 0) {
+      return res.status(200).json({
+        success: true,
+        modifiedCount: 0,
+      });
+    }
+
+    const messageIds = unreadMessages.map(
+      (message) => message._id
+    );
+
+
+    // Update only the messages we just identified.
     const result = await Message.updateMany(
       {
         ...messageFilter,
-        sender: {
-          $ne: currentUserId,
-        },
-        isRead: {
-          $ne: true,
-        },
+        _id: { $in: messageIds },
+        sender: otherUserId,
+        isRead: { $ne: true },
       },
       {
         $set: {
@@ -528,16 +588,18 @@ export const markConversationRead = async (req, res) => {
       }
     );
 
-    if(result.modifiedCount > 0){
+    // Notify the original sender only after MongoDB is updated.
+    if (result.modifiedCount > 0) {
       const io = req.app.get("io");
 
-      io?.to(`user:${receiverId}`).emit("message:read", {
+      io?.to(`user:${otherUserId}`).emit("message:read", {
         conversationId: String(conversation._id),
-        messageIds: messageIds.map(String),
-        readAt,
-      });  
+        messageIds: messageIds.map((id) => String(id)),
+        readAt:new Date(),
+      });
     }
-          return res.status(200).json({
+
+    return res.status(200).json({
       success: true,
       modifiedCount: result.modifiedCount,
     });

@@ -15,12 +15,39 @@ import {
   getConversations,
   searchMessagePeople,
 } from "@/services/messageService";
-import socket from "@/services/socket";
+
 
 const getId = (value) => String(value?._id ?? value ?? "");
 
 const getName = (person) =>
   person?.name || person?.username || "Nexo user";
+
+const getLastMessagePreview = (message, currentUserId) => {
+  if (!message) return "Start a conversation";
+
+  const isOwnMessage =
+    getId(message.sender) === getId(currentUserId);
+
+  const isAttachment =
+    message.type === "image" ||
+    message.type === "voice" ||
+    message.type === "sticker" ||
+    Boolean(
+      message.image?.url ||
+      message.audio?.url ||
+      message.sticker?.id
+    );
+
+  if (isAttachment) {
+    return isOwnMessage
+      ? "You: Sent an attachment"
+      : `${getName(message.sender)} sent an attachment`;
+  }
+
+  return isOwnMessage
+    ? `You: ${message.message}`
+    : message.message || "Message";
+};
 
 const formatTime = (dateValue) => {
   if (!dateValue) return "";
@@ -110,18 +137,6 @@ export default function ConversationList({
     loadConversations();
   }, [loadConversations, refreshKey]);
 
-
-  useEffect(() => {
-  const handleNewMessage = () => {
-    refreshKey();
-  };
-
-  socket.on("message:new", handleNewMessage);
-
-  return () => {
-    socket.off("message:new", handleNewMessage);
-  };
-}, [refreshKey]);
 
   // Debounced people search.
   useEffect(() => {
@@ -370,14 +385,7 @@ export default function ConversationList({
 
                     <span className="mt-1 flex items-center gap-2">
                       <span className="min-w-0 flex-1 truncate text-xs text-[#686A72]">
-                        {lastMessage
-                          ? `${
-                              getId(lastMessage.sender) ===
-                              getId(user?._id)
-                                ? "You: "
-                                : ""
-                            }${lastMessage.message}`
-                          : "Start a conversation"}
+                        {getLastMessagePreview(lastMessage, user?._id)}
                       </span>
 
                       {conversation.unreadCount > 0 && (

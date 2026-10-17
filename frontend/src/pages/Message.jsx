@@ -7,6 +7,7 @@ import { getUserByUsername } from "@/services/userService";
 
 import ConversationList from "@/components/message/ConversationList";
 import ChatWindow from "@/components/message/ChatWindow";
+import socket from "@/services/socket";
 
 export default function Messages() {
   const { user } = useAuth();
@@ -20,6 +21,31 @@ export default function Messages() {
   const refreshInbox = useCallback(() => {
     setInboxVersion((version) => version + 1);
   }, []);
+  
+  // refreshes the convo list only when the message is from someone whose chat is not currently open
+  useEffect(() => {
+  const handleNewMessage = ({ message }) => {
+    const senderId = String(
+      message?.sender?._id ?? message?.sender ?? ""
+    );
+
+    const activeContactId = String(
+      selectedContact?._id ?? ""
+    );
+
+    // ChatWindow handles messages for the open conversation.
+    // Refresh the inbox for messages from other contacts.
+    if (senderId !== activeContactId) {
+      refreshInbox();
+    }
+  };
+
+  socket.on("message:new", handleNewMessage);
+
+  return () => {
+    socket.off("message:new", handleNewMessage);
+  };
+}, [selectedContact?._id, refreshInbox]);
 
   const handleSelectContact = useCallback(
     (contact) => {

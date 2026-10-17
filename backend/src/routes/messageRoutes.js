@@ -1,7 +1,7 @@
 import express from "express";
 import authMiddleware from "../middleware/authMiddleware.js";
 import { deleteConversationForMe, getConversations, getMessage, markConversationRead, reportUser, searchMessagePeople, sendMessage } from "../controllers/messageController.js";
-
+import upload from "../middleware/uploadMiddleware.js";
 const router = express.Router();
 
 router.use(authMiddleware);
@@ -9,7 +9,7 @@ router.use(authMiddleware);
 router.get("/conversations", getConversations);
 router.get("/people", searchMessagePeople);
 
-router.post("/send/:id", sendMessage);
+router.post("/send/:id", upload.single("image") , sendMessage);
 router.get("/all/:id", getMessage);
 router.patch("/read/:id", markConversationRead);
 router.delete("/conversations/with/:id",deleteConversationForMe);
