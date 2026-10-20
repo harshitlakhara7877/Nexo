@@ -11,6 +11,7 @@ import {
   Mic,
   Send,
   Smile,
+  Square,
   Sticker,
   X,
 } from "lucide-react";
@@ -35,16 +36,17 @@ import DeleteChatDialog from "@/components/message/DeleteChatDialog";
 import socket from "@/services/socket";
 
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import ChatHeader from "./ChatHeader";
+import InputBar from "./InputBar";
+import MessageComponent from "./MessageComponent";
+
+const MAX_MESSAGE_LENGTH = 2000;
+const MAX_ATTACHMENT_SIZE = 5 * 1024 * 1024;
 
 const getId = (value) => String(value?._id ?? value ?? "");
 
-const getName = (person) =>
-  person?.name || person?.username || "Nexo user";
+const getName = (person) => person?.name || person?.username || "Nexo user";
 
 const formatTime = (value) => {
   if (!value) return "";
@@ -57,6 +59,14 @@ const formatTime = (value) => {
     hour: "2-digit",
     minute: "2-digit",
   });
+};
+
+const formatDuration = (seconds) => {
+  const safeSeconds = Math.max(0, Math.floor(seconds || 0));
+  const minutes = Math.floor(safeSeconds / 60);
+  const remainingSeconds = safeSeconds % 60;
+
+  return `${minutes}:${String(remainingSeconds).padStart(2, "0")}`;
 };
 
 function UserAvatar({ user }) {
@@ -101,21 +111,28 @@ export default function ChatWindow({
 
   const [selectedImage, setSelectedImage] = useState(null);
   const [selectedImagePreview, setSelectedImagePreview] = useState("");
-
   const [imageDialogUrl, setImageDialogUrl] = useState(null);
 
   const [isRecording, setIsRecording] = useState(false);
+  const [recordedAudio, setRecordedAudio] = useState(null);
+  const [recordedAudioPreview, setRecordedAudioPreview] = useState("");
+  const [recordedAudioDuration, setRecordedAudioDuration] = useState(0);
+  const [recordingElapsed, setRecordingElapsed] = useState(0);
 
   const imageInputRef = useRef(null);
   const mediaRecorderRef = useRef(null);
+  const recordingStreamRef = useRef(null);
   const audioChunksRef = useRef([]);
+  const recordingStartedAtRef = useRef(null);
+  const cancelRecordingRef = useRef(false);
+
   const bottomRef = useRef(null);
   const textareaRef = useRef(null);
   const emojiPickerRef = useRef(null);
   const emojiButtonRef = useRef(null);
 
   // --------------------------------------------------
-  // Load messages for the selected conversation.
+  // Load messages.
   // --------------------------------------------------
 
   const loadMessages = useCallback(async () => {
@@ -140,9 +157,7 @@ export default function ChatWindow({
       const response = await getMessages(selectedContact._id);
 
       if (!response?.success) {
-        throw new Error(
-          response?.message || "Unable to load messages."
-        );
+        throw new Error(response?.message || "Unable to load messages.");
       }
 
       setMessages(response.messages || []);
@@ -153,19 +168,31 @@ export default function ChatWindow({
       setError(
         err.response?.data?.message ||
           err.message ||
-          "Unable to load messages."
+          "Unable to load messages.",
       );
     } finally {
       setLoading(false);
     }
   }, [selectedContact?._id, onConversationUpdated]);
 
-  // Reset conversation-specific UI when switching contacts.
+  // Reset chat-specific state when changing conversations.
   useEffect(() => {
+    // Discard an active recording when switching conversations.
+    const recorder = mediaRecorderRef.current;
+
+    if (recorder?.state === "recording") {
+      cancelRecordingRef.current = true;
+      recorder.stop();
+    }
+
     setMessages([]);
     setDraft("");
     setError("");
     setSelectedImage(null);
+    setRecordedAudio(null);
+    setRecordedAudioDuration(0);
+    setRecordingElapsed(0);
+    setIsRecording(false);
     setShowEmojiPicker(false);
     setImageDialogUrl(null);
     setShowDetails(false);
@@ -184,7 +211,7 @@ export default function ChatWindow({
   }, [selectedContact?._id, loadMessages]);
 
   // --------------------------------------------------
-  // Create and clean up the local image preview URL.
+  // Image preview URL.
   // --------------------------------------------------
 
   useEffect(() => {
@@ -203,7 +230,26 @@ export default function ChatWindow({
   }, [selectedImage]);
 
   // --------------------------------------------------
-  // Close the emoji picker when clicking outside it.
+  // Audio preview URL.
+  // --------------------------------------------------
+
+  useEffect(() => {
+    if (!recordedAudio) {
+      setRecordedAudioPreview("");
+      return;
+    }
+
+    const previewUrl = URL.createObjectURL(recordedAudio);
+
+    setRecordedAudioPreview(previewUrl);
+
+    return () => {
+      URL.revokeObjectURL(previewUrl);
+    };
+  }, [recordedAudio]);
+
+  // --------------------------------------------------
+  // Close emoji picker on outside click.
   // --------------------------------------------------
 
   useEffect(() => {
@@ -231,7 +277,34 @@ export default function ChatWindow({
     };
   }, [showEmojiPicker]);
 
-  // Scroll to the latest message.
+  // --------------------------------------------------
+  // Recording timer.
+  // --------------------------------------------------
+
+  useEffect(() => {
+    if (!isRecording) return;
+
+    const updateTimer = () => {
+      const startedAt = recordingStartedAtRef.current;
+
+      if (!startedAt) return;
+
+      setRecordingElapsed(Math.floor((Date.now() - startedAt) / 1000));
+    };
+
+    updateTimer();
+
+    const intervalId = window.setInterval(updateTimer, 1000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [isRecording]);
+
+  // --------------------------------------------------
+  // Scroll to latest message.
+  // --------------------------------------------------
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({
       behavior: "smooth",
@@ -240,22 +313,20 @@ export default function ChatWindow({
   }, [messages, loading]);
 
   // --------------------------------------------------
-  // Receive messages for the currently open chat.
+  // Receive new messages for the open conversation.
   // --------------------------------------------------
 
   useEffect(() => {
     const handleNewMessage = async ({ message }) => {
       if (!message || !selectedContact?._id) return;
 
-      if (
-        getId(message.sender) !== getId(selectedContact._id)
-      ) {
+      if (getId(message.sender) !== getId(selectedContact._id)) {
         return;
       }
 
       setMessages((currentMessages) => {
         const alreadyExists = currentMessages.some(
-          (item) => getId(item._id) === getId(message._id)
+          (item) => getId(item._id) === getId(message._id),
         );
 
         if (alreadyExists) return currentMessages;
@@ -279,7 +350,7 @@ export default function ChatWindow({
   }, [selectedContact?._id, onConversationUpdated]);
 
   // --------------------------------------------------
-  // Update Sent / Seen when the backend emits message:read.
+  // Update Sent / Seen.
   // --------------------------------------------------
 
   useEffect(() => {
@@ -298,8 +369,8 @@ export default function ChatWindow({
                 isRead: true,
                 readAt,
               }
-            : message
-        )
+            : message,
+        ),
       );
     };
 
@@ -311,33 +382,32 @@ export default function ChatWindow({
   }, []);
 
   // --------------------------------------------------
-  // Image selection and validation.
+  // Image selection.
   // --------------------------------------------------
 
   const handleSelectImage = (event) => {
     const file = event.target.files?.[0];
 
-    // Allow selecting the same file again later.
+    // Allow selecting the same file again.
     event.target.value = "";
 
     if (!file) return;
 
-    const allowedTypes = [
-      "image/jpeg",
-      "image/png",
-      "image/webp",
-    ];
+    const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
 
     if (!allowedTypes.includes(file.type)) {
       toast.error("Choose a JPEG, PNG, or WebP image.");
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) {
+    if (file.size > MAX_ATTACHMENT_SIZE) {
       toast.error("Image must be 5 MB or smaller.");
       return;
     }
 
+    // One attachment per message.
+    setRecordedAudio(null);
+    setRecordedAudioDuration(0);
     setSelectedImage(file);
   };
 
@@ -350,7 +420,7 @@ export default function ChatWindow({
   };
 
   // --------------------------------------------------
-  // Send a text message or an image with an optional caption.
+  // Send text, image, or voice message.
   // --------------------------------------------------
 
   const handleSend = async (event) => {
@@ -358,12 +428,13 @@ export default function ChatWindow({
 
     const text = draft.trim();
     const image = selectedImage;
+    const audio = recordedAudio;
 
     if (
-      (!text && !image) ||
+      (!text && !image && !audio) ||
       !selectedContact?._id ||
       sending ||
-      text.length > 2000
+      text.length > MAX_MESSAGE_LENGTH
     ) {
       return;
     }
@@ -373,10 +444,17 @@ export default function ChatWindow({
     try {
       let payload = text;
 
-      if (image) {
+      if (image || audio) {
         const formData = new FormData();
 
-        formData.append("image", image);
+        if (image) {
+          formData.append("image", image);
+        }
+
+        if (audio) {
+          formData.append("audio", audio);
+          formData.append("duration", String(recordedAudioDuration));
+        }
 
         if (text) {
           formData.append("message", text);
@@ -385,20 +463,15 @@ export default function ChatWindow({
         payload = formData;
       }
 
-      const response = await sendMessage(
-        selectedContact._id,
-        payload
-      );
+      const response = await sendMessage(selectedContact._id, payload);
 
       if (!response?.success || !response.data) {
-        throw new Error(
-          response?.message || "Unable to send message."
-        );
+        throw new Error(response?.message || "Unable to send message.");
       }
 
       setMessages((currentMessages) => {
         const alreadyExists = currentMessages.some(
-          (item) => getId(item._id) === getId(response.data._id)
+          (item) => getId(item._id) === getId(response.data._id),
         );
 
         return alreadyExists
@@ -408,6 +481,8 @@ export default function ChatWindow({
 
       setDraft("");
       setSelectedImage(null);
+      setRecordedAudio(null);
+      setRecordedAudioDuration(0);
       setShowEmojiPicker(false);
 
       if (imageInputRef.current) {
@@ -424,9 +499,7 @@ export default function ChatWindow({
       });
 
       toast.error(
-        err.response?.data?.message ||
-          err.message ||
-          "Unable to send message."
+        err.response?.data?.message || err.message || "Unable to send message.",
       );
     } finally {
       setSending(false);
@@ -434,25 +507,49 @@ export default function ChatWindow({
   };
 
   // --------------------------------------------------
-  // Voice recording — the sending/upload path is not
-  // implemented by this composer change.
+  // Voice recording.
   // --------------------------------------------------
 
   const startRecording = async () => {
+    let stream;
+
     try {
-      if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+      if (
+        !navigator.mediaDevices?.getUserMedia ||
+        typeof MediaRecorder === "undefined"
+      ) {
         toast.error("Voice recording is not supported by this browser.");
         return;
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({
+      stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
       });
 
-      const recorder = new MediaRecorder(stream);
+      const supportedMimeTypes = [
+        "audio/webm;codecs=opus",
+        "audio/ogg;codecs=opus",
+        "audio/mp4",
+      ];
 
+      const mimeType = supportedMimeTypes.find((type) =>
+        MediaRecorder.isTypeSupported(type),
+      );
+
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+
+      recordingStreamRef.current = stream;
       mediaRecorderRef.current = recorder;
       audioChunksRef.current = [];
+      cancelRecordingRef.current = false;
+      recordingStartedAtRef.current = Date.now();
+
+      setRecordingElapsed(0);
+      setRecordedAudio(null);
+      setRecordedAudioDuration(0);
+      setSelectedImage(null);
 
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
@@ -460,27 +557,75 @@ export default function ChatWindow({
         }
       };
 
+      recorder.onerror = (event) => {
+        console.error("MediaRecorder error:", event.error);
+        toast.error("Voice recording failed.");
+      };
+
       recorder.onstop = () => {
+        const activeStream = recordingStreamRef.current;
+
+        activeStream?.getTracks().forEach((track) => track.stop());
+        recordingStreamRef.current = null;
+
+        setIsRecording(false);
+
+        if (cancelRecordingRef.current) {
+          cancelRecordingRef.current = false;
+          audioChunksRef.current = [];
+          setRecordingElapsed(0);
+          return;
+        }
+
+        const rawMimeType =
+          recorder.mimeType || audioChunksRef.current[0]?.type || "audio/webm";
+
+        const fileType = rawMimeType.split(";")[0];
+
         const audioBlob = new Blob(audioChunksRef.current, {
-          type: recorder.mimeType || "audio/webm",
+          type: fileType,
         });
+
+        const startedAt = recordingStartedAtRef.current || Date.now();
+
+        const duration = Math.max(0, (Date.now() - startedAt) / 1000);
+
+        audioChunksRef.current = [];
+
+        if (!audioBlob.size) {
+          toast.error("No audio was recorded.");
+          return;
+        }
+
+        if (audioBlob.size > MAX_ATTACHMENT_SIZE) {
+          toast.error("Voice message must be 5 MB or smaller.");
+          return;
+        }
+
+        const extension = fileType.includes("ogg")
+          ? "ogg"
+          : fileType.includes("mp4")
+            ? "mp4"
+            : "webm";
 
         const audioFile = new File(
           [audioBlob],
-          `voice-${Date.now()}.webm`,
-          { type: audioBlob.type }
+          `voice-${Date.now()}.${extension}`,
+          { type: fileType },
         );
 
-        // Voice upload is a separate feature step.
-        console.log("Recorded audio:", audioFile);
-
-        stream.getTracks().forEach((track) => track.stop());
-        setIsRecording(false);
+        setRecordedAudio(audioFile);
+        setRecordedAudioDuration(duration);
+        setRecordingElapsed(Math.floor(duration));
       };
 
+      // Start exactly once.
       recorder.start();
       setIsRecording(true);
     } catch (error) {
+      stream?.getTracks().forEach((track) => track.stop());
+      recordingStreamRef.current = null;
+
       console.error("Microphone access failed:", error);
       toast.error("Could not access your microphone.");
     }
@@ -492,8 +637,27 @@ export default function ChatWindow({
     if (recorder?.state === "recording") {
       recorder.stop();
     }
+  };
 
+  const cancelRecording = () => {
+    const recorder = mediaRecorderRef.current;
+
+    cancelRecordingRef.current = true;
+    audioChunksRef.current = [];
+
+    setRecordedAudio(null);
+    setRecordedAudioDuration(0);
+    setRecordingElapsed(0);
     setIsRecording(false);
+
+    if (recorder?.state === "recording") {
+      recorder.stop();
+    } else {
+      recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+
+      recordingStreamRef.current = null;
+      cancelRecordingRef.current = false;
+    }
   };
 
   // --------------------------------------------------
@@ -509,9 +673,7 @@ export default function ChatWindow({
       const response = await deleteConversation(selectedContact._id);
 
       if (!response?.success) {
-        throw new Error(
-          response?.message || "Unable to delete chat."
-        );
+        throw new Error(response?.message || "Unable to delete chat.");
       }
 
       setShowDeleteDialog(false);
@@ -523,9 +685,7 @@ export default function ChatWindow({
       console.error("Delete conversation error:", err);
 
       toast.error(
-        err.response?.data?.message ||
-          err.message ||
-          "Unable to delete chat."
+        err.response?.data?.message || err.message || "Unable to delete chat.",
       );
     } finally {
       setDeleting(false);
@@ -546,9 +706,7 @@ export default function ChatWindow({
       });
 
       if (!response?.success) {
-        throw new Error(
-          response?.message || "Unable to submit report."
-        );
+        throw new Error(response?.message || "Unable to submit report.");
       }
 
       toast.success("Report submitted successfully");
@@ -561,7 +719,7 @@ export default function ChatWindow({
       toast.error(
         err.response?.data?.message ||
           err.message ||
-          "Unable to submit report."
+          "Unable to submit report.",
       );
 
       return false;
@@ -569,7 +727,7 @@ export default function ChatWindow({
   };
 
   // --------------------------------------------------
-  // Chat UI.
+  // Render.
   // --------------------------------------------------
 
   return (
@@ -582,408 +740,38 @@ export default function ChatWindow({
         <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
           {selectedContact ? (
             <>
-              {/* Chat header */}
-              <header className="flex h-[78px] shrink-0 items-center gap-3 border-b border-[#E4E1DB] bg-white px-4 sm:px-6">
-                <button
-                  type="button"
-                  onClick={onBack}
-                  aria-label="Back to conversations"
-                  className="flex size-9 shrink-0 items-center justify-center rounded-full text-[#686A72] transition hover:bg-[#F7F6F3] md:hidden"
-                >
-                  <ArrowLeft size={19} />
-                </button>
+              <ChatHeader
+                contact={selectedContact}
+                onBack={onBack}
+                showDetails={showDetails}
+                onToggleDetails={() => setShowDetails((current) => !current)}
+              />
 
-                <UserAvatar user={selectedContact} />
-
-                <div className="min-w-0 flex-1">
-                  <h2 className="truncate text-sm font-semibold text-[#1B1C20]">
-                    {getName(selectedContact)}
-                  </h2>
-
-                  <p className="mt-1 truncate text-xs text-[#686A72]">
-                    @{selectedContact.username}
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setShowDetails((current) => !current)}
-                  aria-label={
-                    showDetails
-                      ? "Hide details"
-                      : "Conversation details"
-                  }
-                  aria-pressed={showDetails}
-                  title="Conversation details"
-                  className="flex size-10 shrink-0 items-center justify-center rounded-full text-[#686A72] transition hover:bg-[#F7F6F3] hover:text-[#FF4D00]"
-                >
-                  <Info size={22} />
-                </button>
-              </header>
-
-              {/* Messages */}
-              <div className="min-h-0 flex-1 overflow-y-auto bg-white px-4 py-5 sm:px-6">
-                {loading ? (
-                  <div className="flex h-full items-center justify-center gap-2 text-sm text-[#686A72]">
-                    <LoaderCircle
-                      size={18}
-                      className="animate-spin text-[#FF4D00]"
-                    />
-                    Loading messages...
-                  </div>
-                ) : error ? (
-                  <div className="flex h-full flex-col items-center justify-center text-center">
-                    <p className="text-sm text-[#686A72]">{error}</p>
-
-                    <button
-                      type="button"
-                      onClick={loadMessages}
-                      className="mt-3 text-sm font-semibold text-[#FF4D00] hover:underline"
-                    >
-                      Try again
-                    </button>
-                  </div>
-                ) : messages.length === 0 ? (
-                  <div className="flex h-full flex-col items-center justify-center px-6 text-center">
-                    <span className="flex size-16 items-center justify-center rounded-full bg-[#FFF0E8] text-[#FF4D00]">
-                      <MessageCircle size={27} />
-                    </span>
-
-                    <h3 className="mt-4 text-base font-semibold text-[#1B1C20]">
-                      Say hello to {getName(selectedContact)}
-                    </h3>
-
-                    <p className="mt-2 max-w-xs text-sm leading-6 text-[#686A72]">
-                      Send a message to get started.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="mx-auto flex max-w-4xl flex-col gap-4">
-                    {messages.map((message) => {
-                      const ownMessage =
-                        getId(message.sender) === getId(user?._id);
-
-                      const isImageMessage =
-                        message.type === "image" ||
-                        Boolean(message.image?.url);
-
-                      return (
-                        <div
-                          key={message._id}
-                          className={`flex ${
-                            ownMessage ? "justify-end" : "justify-start"
-                          }`}
-                        >
-                          <div
-                            className={`max-w-[85%] rounded-2xl px-3 py-3 sm:max-w-[75%] ${
-                              ownMessage
-                                ? "rounded-br-md bg-[#FF4D00] text-white"
-                                : "rounded-bl-md border border-[#E4E1DB] bg-[#F7F6F3] text-[#1B1C20]"
-                            }`}
-                          >
-                            {isImageMessage ? (
-                              <div className="space-y-2">
-                                {message.image?.url ? (
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setImageDialogUrl(message.image.url)
-                                    }
-                                    aria-label="View image full size"
-                                    className="block max-w-full cursor-zoom-in overflow-hidden rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4D00]"
-                                  >
-                                    <img
-                                      src={message.image.url}
-                                      alt="Shared image"
-                                      loading="lazy"
-                                      className="max-h-80 max-w-full rounded-xl object-contain"
-                                    />
-                                  </button>
-                                ) : (
-                                  <p className="px-1 py-2 text-sm">
-                                    Image unavailable
-                                  </p>
-                                )}
-
-                                {message.message?.trim() && (
-                                  <p className="whitespace-pre-wrap break-words px-1 text-sm leading-6">
-                                    {message.message}
-                                  </p>
-                                )}
-                              </div>
-                            ) : message.type === "voice" && message.audio?.url ? (
-                              <audio
-                                controls
-                                preload="metadata"
-                                src={message.audio.url}
-                                className="max-w-full"
-                              />
-                            ) : message.type === "sticker" ? (
-                              <span className="block px-2 py-1 text-5xl">
-                                {message.sticker?.emoji || "✨"}
-                              </span>
-                            ) : (
-                              <p className="whitespace-pre-wrap break-words px-1 text-sm leading-6">
-                                {message.message}
-                              </p>
-                            )}
-
-                            <div
-                              className={`mt-1.5 flex items-center justify-end gap-1.5 px-1 text-[10px] ${
-                                ownMessage
-                                  ? "text-white/75"
-                                  : "text-[#85858D]"
-                              }`}
-                            >
-                              <span>{formatTime(message.createdAt)}</span>
-
-                              {ownMessage &&
-                                (message.isRead ? (
-                                  <CheckCheck size={13} />
-                                ) : (
-                                  <Check size={12} />
-                                ))}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-
-                    <div ref={bottomRef} />
-                  </div>
-                )}
-              </div>
+              {/* Full-width message area */}
+              <MessageComponent
+                messages={messages}
+                userId={user?._id}
+                selectedContact={selectedContact}
+                loading={loading}
+                error={error}
+                onRetry={loadMessages}
+              />
 
               {/* Composer */}
-              <form
-                onSubmit={handleSend}
-                className="shrink-0 px-3 pb-3 pt-2 sm:px-5 sm:pb-4"
-              >
-                <div className="relative mx-auto max-w-4xl rounded-[24px] border border-[#E4E1DB] bg-white shadow-sm transition focus-within:border-[#FF4D00] focus-within:ring-2 focus-within:ring-[#FF4D00]/10">
-                  {/* Emoji picker: positioned above the input, not inside its row */}
-                  {showEmojiPicker && (
-                    <div
-                      ref={emojiPickerRef}
-                      className="absolute bottom-[calc(100%+12px)] left-2 z-50 overflow-hidden rounded-2xl border border-[#E4E1DB] bg-white shadow-xl"
-                    >
-                      <EmojiPicker
-                        onEmojiClick={(emojiData) => {
-                          setDraft((previous) =>
-                            (previous + emojiData.emoji).slice(0, 2000)
-                          );
-                          setShowEmojiPicker(false);
-                          textareaRef.current?.focus();
-                        }}
-                        width={320}
-                        height={360}
-                        previewConfig={{ showPreview: false }}
-                      />
-                    </div>
-                  )}
+              <InputBar
+                selectedContact={selectedContact}
+                onMessageSent={(newMessage) => {
+                  setMessages((current) => {
+                    const alreadyExists = current.some(
+                      (message) =>
+                        String(message._id) === String(newMessage._id),
+                    );
 
-                  {/* Selected image strip — inside the composer */}
-                  {selectedImage && selectedImagePreview && (
-                    <div className="flex items-start gap-3 border-b border-[#EEECE8] px-3 pb-3 pt-3 sm:px-4">
-                      {/* Add / replace image button */}
-                      <button
-                        type="button"
-                        onClick={() => imageInputRef.current?.click()}
-                        aria-label="Add or replace image"
-                        title="Add or replace image"
-                        className="flex size-[76px] shrink-0 flex-col items-center justify-center gap-1.5 rounded-xl bg-[#F0F1F2] text-[#686A72] transition hover:bg-[#FFF0E8] hover:text-[#FF4D00] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4D00]"
-                      >
-                        <ImageIcon size={24} strokeWidth={1.8} />
-                        <span className="text-[10px] font-medium">
-                          Add image
-                        </span>
-                      </button>
-
-                      {/* Selected image thumbnail and its own cross button */}
-                      <div className="relative size-[76px] shrink-0">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setImageDialogUrl(selectedImagePreview)
-                          }
-                          aria-label="Preview selected image"
-                          className="size-full overflow-hidden rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF4D00]"
-                        >
-                          <img
-                            src={selectedImagePreview}
-                            alt="Selected image preview"
-                            className="size-full rounded-xl border border-[#E4E1DB] object-cover"
-                          />
-                        </button>
-
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="icon"
-                          onClick={removeSelectedImage}
-                          aria-label="Remove selected image"
-                          title="Remove image"
-                          className="absolute -right-2 -top-2 z-10 size-6 rounded-full border border-[#E4E1DB] bg-white p-0 text-[#1B1C20] shadow-md hover:bg-[#FFF0E8] hover:text-[#FF4D00]"
-                        >
-                          <X size={13} />
-                        </Button>
-                      </div>
-
-                      <div className="min-w-0 flex-1 pt-1">
-                        <p className="truncate text-sm font-semibold text-[#1B1C20]">
-                          Image ready to send
-                        </p>
-                        <p className="mt-1 truncate text-xs text-[#686A72]">
-                          {selectedImage.name}
-                        </p>
-                        <p className="mt-1 text-xs text-[#85858D]">
-                          Add a caption below, or send it alone.
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Text-entry row */}
-                  <div className="flex items-end gap-2 p-2 sm:gap-3 sm:p-3">
-                    <button
-                      ref={emojiButtonRef}
-                      type="button"
-                      aria-label="Choose emoji"
-                      title="Emoji"
-                      aria-expanded={showEmojiPicker}
-                      onClick={() =>
-                        setShowEmojiPicker((previous) => !previous)
-                      }
-                      className={`mb-0.5 flex size-10 shrink-0 items-center justify-center rounded-full transition ${
-                        showEmojiPicker
-                          ? "bg-[#FFF0E8] text-[#FF4D00]"
-                          : "text-[#686A72] hover:bg-[#F7F6F3] hover:text-[#FF4D00]"
-                      }`}
-                    >
-                      <Smile size={24} strokeWidth={1.8} />
-                    </button>
-
-                    <textarea
-                      ref={textareaRef}
-                      value={draft}
-                      onChange={(event) =>
-                        setDraft(event.target.value.slice(0, 2000))
-                      }
-                      onKeyDown={(event) => {
-                        if (
-                          event.key === "Enter" &&
-                          !event.shiftKey &&
-                          !event.nativeEvent.isComposing
-                        ) {
-                          event.preventDefault();
-
-                          if (
-                            (draft.trim() || selectedImage) &&
-                            !sending
-                          ) {
-                            handleSend(event);
-                          }
-                        }
-
-                        if (event.key === "Escape") {
-                          setShowEmojiPicker(false);
-                        }
-                      }}
-                      rows={1}
-                      maxLength={2000}
-                      placeholder={`Message ${selectedContact.username}...`}
-                      aria-label="Write a message"
-                      className="max-h-32 min-h-10 min-w-0 flex-1 resize-y bg-transparent px-1 py-3 text-sm leading-5 text-[#1B1C20] outline-none placeholder:text-[#9A9CA3]"
-                    />
-
-                    {/* Keep the image option available while typing */}
-                    {!selectedImage && (
-                      <input
-                        ref={imageInputRef}
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp"
-                        className="hidden"
-                        onChange={handleSelectImage}
-                      />
-                    )}
-
-                    {selectedImage && (
-                      <input
-                        ref={imageInputRef}
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp"
-                        className="hidden"
-                        onChange={handleSelectImage}
-                      />
-                    )}
-
-                    {!selectedImage && (
-                      <button
-                        type="button"
-                        onClick={() => imageInputRef.current?.click()}
-                        aria-label="Attach image"
-                        title="Attach image"
-                        className="mb-0.5 flex size-10 shrink-0 items-center justify-center rounded-full text-[#686A72] transition hover:bg-[#FFF0E8] hover:text-[#FF4D00]"
-                      >
-                        <ImageIcon size={23} strokeWidth={1.8} />
-                      </button>
-                    )}
-
-                    {draft.trim() || selectedImage ? (
-                      <button
-                        type="submit"
-                        disabled={sending}
-                        aria-label="Send message"
-                        title="Send message"
-                        className="mb-0.5 flex size-10 shrink-0 items-center justify-center rounded-full bg-[#FF4D00] text-white transition hover:bg-[#E64400] disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {sending ? (
-                          <LoaderCircle size={18} className="animate-spin" />
-                        ) : (
-                          <Send size={17} />
-                        )}
-                      </button>
-                    ) : (
-                      <div className="mb-0.5 flex shrink-0 items-center gap-1">
-                        <button
-                          type="button"
-                          aria-label={
-                            isRecording
-                              ? "Stop recording"
-                              : "Record voice message"
-                          }
-                          title={
-                            isRecording
-                              ? "Stop recording"
-                              : "Voice message"
-                          }
-                          onClick={
-                            isRecording ? stopRecording : startRecording
-                          }
-                          className={`flex size-10 items-center justify-center rounded-full transition hover:bg-[#FFF0E8] hover:text-[#FF4D00] ${
-                            isRecording
-                              ? "text-red-500"
-                              : "text-[#686A72]"
-                          }`}
-                        >
-                          <Mic size={22} strokeWidth={1.8} />
-                        </button>
-
-                        <button
-                          type="button"
-                          aria-label="Stickers"
-                          title="Stickers"
-                          onClick={() =>
-                            toast.info("Sticker sending will be added next.")
-                          }
-                          className="flex size-10 items-center justify-center rounded-full text-[#686A72] transition hover:bg-[#FFF0E8] hover:text-[#FF4D00]"
-                        >
-                          <Sticker size={22} strokeWidth={1.8} />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </form>
+                    return alreadyExists ? current : [...current, newMessage];
+                  });
+                }}
+                onConversationUpdated={onConversationUpdated}
+              />
             </>
           ) : (
             <div className="flex h-full flex-col items-center justify-center px-6 text-center">
@@ -1003,7 +791,7 @@ export default function ChatWindow({
           )}
         </div>
 
-        {/* Conversation details panel */}
+        {/* Conversation details */}
         {selectedContact && showDetails && (
           <ChatDetails
             contact={selectedContact}
@@ -1014,7 +802,7 @@ export default function ChatWindow({
         )}
       </section>
 
-      {/* Full-size image dialog using shadcn */}
+      {/* Full-size image dialog */}
       <Dialog
         open={Boolean(imageDialogUrl)}
         onOpenChange={(open) => {

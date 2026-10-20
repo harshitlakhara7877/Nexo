@@ -19,16 +19,12 @@ createRoot(document.getElementById('root')).render(
 
 
 
-// feat: add emoji picker and voice message functionality to chat window
 
 // feat: implement chat details and report/delete dialogs
 
 
 
 // feat: enhance message service with delete conversation and report user functions
-// feat: integrate Socket.IO for real-time communication i
-
-// chore: update package.json to include emoji-picker-react dependency
 
 
 

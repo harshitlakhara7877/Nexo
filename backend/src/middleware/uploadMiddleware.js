@@ -2,19 +2,32 @@ import multer from "multer";
 
 const storage = multer.memoryStorage();
 
-const fileFilter = (req, file, cb) => {
-  const allowedTypes = [
-    "image/jpeg",
-    "image/png",
-    "image/webp",
-    "image/jpg",
-  ];
+const imageTypes = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/jpg",
+];
+const audioTypes = [
+  "audio/webm",
+  "audio/ogg",
+  "audio/mp4",
+  "audio/mpeg",
+  "audio/wav",
+  "audio/x-wav",
+];
 
-  if (allowedTypes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error("Only JPEG, PNG, JPG, and WebP images are allowed"), false);
+const fileFilter = (req, file, cb) => {
+  
+
+  if (["image", "profilePicture"].includes(file.fieldname) && imageTypes.includes(file.mimetype)) {
+    return cb(null, true);
+  } 
+
+  if(file.fieldname === "audio" && audioTypes.includes(file.mimetype)) {
+    return cb(null, true);
   }
+  return cb(new Error("Only JPEG, PNG, JPG, and WebP images are allowed"), false);
 };
 
 const upload = multer({
@@ -22,6 +35,7 @@ const upload = multer({
   fileFilter,
   limits: {
     fileSize: 5 * 1024 * 1024, // 5 MB
+    files:1
   },
 });
 

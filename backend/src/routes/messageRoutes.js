@@ -9,7 +9,13 @@ router.use(authMiddleware);
 router.get("/conversations", getConversations);
 router.get("/people", searchMessagePeople);
 
-router.post("/send/:id", upload.single("image") , sendMessage);
+router.post("/send/:id",
+  upload.fields([
+    { name: "image", maxCount: 1 },
+    { name: "audio", maxCount: 1 },
+  ]),
+  sendMessage
+);
 router.get("/all/:id", getMessage);
 router.patch("/read/:id", markConversationRead);
 router.delete("/conversations/with/:id",deleteConversationForMe);

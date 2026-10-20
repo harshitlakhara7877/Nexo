@@ -4,7 +4,7 @@ import Conversation from "../models/Conversation.js";
 import Message from "../models/Message.js";
 import User from "../models/User.js";
 import UserReport from "../models/UserReport.js";
-import { deleteFromCloudinary, uploadToCloudinary } from "../utils/cloudinaryUpload.js";
+import { deleteAudioFromCloudinary, deleteFromCloudinary, uploadAudioToCloudinary, uploadToCloudinary } from "../utils/cloudinaryUpload.js";
 
 const isValidId = (id) => mongoose.isValidObjectId(id);
 
@@ -307,19 +307,23 @@ export const getMessage = async (req, res) => {
 
 export const sendMessage = async (req, res) => {
   let uploadedImage = null;
+  let uploadedAudio = null;
   let createdMessageId = null;
   let conversationSaved = false;
 
   try {
     const senderId = req.id;
     const receiverId = req.params.id;
-    const imageFile = req.file;
+
+    const imageFile = req.files?.image?.[0] || null;
+    const audioFile = req.files?.audio?.[0] || null;
 
     const messageText =
       typeof req.body?.message === "string"
         ? req.body.message.trim()
         : "";
 
+    // Validate recipient.
     if (!isValidId(receiverId)) {
       return res.status(400).json({
         success: false,
@@ -334,11 +338,18 @@ export const sendMessage = async (req, res) => {
       });
     }
 
-    // Require either text or an image.
-    if (!imageFile && !messageText) {
+    // Exactly one attachment at a time; text may accompany it.
+    if (imageFile && audioFile) {
       return res.status(400).json({
         success: false,
-        message: "A message or image is required.",
+        message: "Send one attachment at a time.",
+      });
+    }
+
+    if (!imageFile && !audioFile && !messageText) {
+      return res.status(400).json({
+        success: false,
+        message: "A message or attachment is required.",
       });
     }
 
@@ -346,6 +357,14 @@ export const sendMessage = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Message cannot exceed 2000 characters.",
+      });
+    }
+
+    // Enforce the existing 5 MB image limit explicitly.
+    if (imageFile && imageFile.size > 5 * 1024 * 1024) {
+      return res.status(400).json({
+        success: false,
+        message: "Image must be 5 MB or smaller.",
       });
     }
 
@@ -360,7 +379,7 @@ export const sendMessage = async (req, res) => {
       });
     }
 
-    // Upload an attached image before saving the message.
+    // Upload image or audio before creating the Message document.
     if (imageFile) {
       uploadedImage = await uploadToCloudinary(
         imageFile.buffer,
@@ -369,6 +388,17 @@ export const sendMessage = async (req, res) => {
 
       if (!uploadedImage?.secure_url || !uploadedImage?.public_id) {
         throw new Error("Image upload did not return valid metadata.");
+      }
+    }
+
+    if (audioFile) {
+      uploadedAudio = await uploadAudioToCloudinary(
+        audioFile.buffer,
+        "nexo/messages/audio"
+      );
+
+      if (!uploadedAudio?.secure_url || !uploadedAudio?.public_id) {
+        throw new Error("Audio upload did not return valid metadata.");
       }
     }
 
@@ -384,16 +414,33 @@ export const sendMessage = async (req, res) => {
       });
     }
 
-    // Save either a text message or an image message.
+    const type = audioFile
+      ? "voice"
+      : imageFile
+        ? "image"
+        : "text";
+
     const newMessage = await Message.create({
       conversation: conversation._id,
       sender: senderId,
-      type: imageFile ? "image" : "text",
+      type,
       message: messageText,
+
       ...(uploadedImage && {
         image: {
           url: uploadedImage.secure_url,
           publicId: uploadedImage.public_id,
+        },
+      }),
+
+      ...(uploadedAudio && {
+        audio: {
+          url: uploadedAudio.secure_url,
+          publicId: uploadedAudio.public_id,
+          ...(Number.isFinite(Number(req.body?.duration)) &&
+            Number(req.body.duration) >= 0 && {
+              duration: Number(req.body.duration),
+            }),
         },
       }),
     });
@@ -402,8 +449,7 @@ export const sendMessage = async (req, res) => {
 
     conversation.message.push(newMessage._id);
 
-    // A new message makes the conversation visible again.
-    // Preserve each participant's deletedAt history cutoff.
+    // Preserve each user's deletedAt history cutoff.
     for (const entry of conversation.deletedChatFor || []) {
       entry.isDeleted = false;
     }
@@ -416,7 +462,7 @@ export const sendMessage = async (req, res) => {
       select: "username name profilePicture",
     });
 
-    // Preserve existing real-time message delivery.
+    // Reuse the existing app-wide real-time delivery.
     const io = req.app.get("io");
 
     io?.to(`user:${receiverId}`).emit("message:new", {
@@ -432,7 +478,7 @@ export const sendMessage = async (req, res) => {
   } catch (error) {
     console.error("Send message error:", error);
 
-    // Clean up a failed, incomplete save where possible.
+    // Clean up incomplete message/media saves when possible.
     if (!conversationSaved) {
       if (createdMessageId) {
         await Message.findByIdAndDelete(createdMessageId).catch(
@@ -446,6 +492,14 @@ export const sendMessage = async (req, res) => {
         await deleteFromCloudinary(uploadedImage.public_id).catch(
           (cleanupError) => {
             console.error("Image cleanup error:", cleanupError);
+          }
+        );
+      }
+
+      if (uploadedAudio?.public_id) {
+        await deleteAudioFromCloudinary(uploadedAudio.public_id).catch(
+          (cleanupError) => {
+            console.error("Audio cleanup error:", cleanupError);
           }
         );
       }

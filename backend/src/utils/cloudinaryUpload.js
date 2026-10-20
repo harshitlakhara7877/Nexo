@@ -23,7 +23,6 @@ export const uploadToCloudinary = (buffer, folder = "nexo") => {
   });
 };
 
-
 export const deleteFromCloudinary = (publicId) => {
     return new Promise((resolve, reject) => {
         cloudinary.uploader.destroy(publicId, {resource_type:"image"},
@@ -37,3 +36,42 @@ export const deleteFromCloudinary = (publicId) => {
         )
     })
 }
+
+export const uploadAudioToCloudinary = (
+  buffer,
+  folder = "nexo/messages/audio"
+) => {
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        folder,
+        resource_type: "video",
+      },
+      (error, result) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve(result);
+        }
+      }
+    );
+
+    Readable.from(buffer).pipe(uploadStream);
+  });
+};
+
+export const deleteAudioFromCloudinary = (publicId) => {
+  return new Promise((resolve, reject) => {
+    cloudinary.uploader.destroy(
+      publicId,
+      { resource_type: "video" },
+      (error, result) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve(result);
+        }
+      }
+    );
+  });
+};
