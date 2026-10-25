@@ -4,13 +4,14 @@ import { addComment, addNewPost, bookmarkPost, deletePost, dislikePost, getAllPo
  getBookmarkedPosts,
  getCommentsOfPost, getLikedPosts, getPostsByUsername, getSinglePost, getUserPosts, likePost } from "../controllers/postController.js";
 import upload from "../middleware/uploadMiddleware.js";
-import { discoverPosts } from "../controllers/SearchController.js";
+import { discoverPosts, searchPosts } from "../controllers/SearchController.js";
 
 const router = express.Router();
 
 router.post("/create", authMiddleware, upload.single('image'), addNewPost);
 router.get("/feed", authMiddleware, getAllPosts);
 router.get("/discover", authMiddleware, discoverPosts);
+router.get("/search", authMiddleware, searchPosts);
 router.get("/posts", authMiddleware, getUserPosts);
 router.get("/liked", authMiddleware, getLikedPosts);
 router.get("/bookmarked", authMiddleware, getBookmarkedPosts);

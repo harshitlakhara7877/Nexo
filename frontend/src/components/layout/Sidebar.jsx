@@ -7,7 +7,8 @@ import {
   Bookmark,
   User,
   LogOut,
-  PlusSquare,
+  PlaySquare,
+  CircleFadingPlus,
 } from "lucide-react";
 
 import { useAuth } from "../../context/AuthContext";
@@ -28,14 +29,19 @@ const Sidebar = () => {
       icon: Home,
     },
     {
+      name: "Search",
+      path: "/search",
+      icon: Search,
+    },
+    {
       name: "Explore",
       path: "/explore",
-      icon: Search,
+      icon: PlaySquare,
     },
     {
       name: "Create",
       path: "/create",
-      icon: PlusSquare,
+      icon: CircleFadingPlus,
     },
     {
       name: "Notifications",

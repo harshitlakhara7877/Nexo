@@ -38,13 +38,24 @@ export const getComments = async(postId) => {
 }
 
 
-export const getDiscoverPosts = async (page = 1, limit = 12) => {
+export const getDiscoverPosts = async (page = 1, limit = 12, options={}) => {
   const response = await api.get("/post/discover", {
     params: { page, limit },
+    signal: options.signal,
   });
 
   return response.data;
 };
+
+export const searchPosts = async ( query, page = 1, limit = 12,options={}) => {
+  const response = await api.get("/post/search", {
+    params: { q:query, page, limit },
+    signal: options.signal,
+  });
+
+  return response.data;
+};
+
 
 export const getUserPosts = async () => {
   const response = await api.get("/post/posts");

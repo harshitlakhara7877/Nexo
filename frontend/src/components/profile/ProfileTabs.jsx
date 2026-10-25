@@ -27,6 +27,7 @@ const ProfileTabs = ({
       navigate(`/post/${post._id}`);
     }
   };
+  
 
   return (
     <section className="mt-7 overflow-hidden rounded-2xl border border-[#E8E5DF] bg-white shadow-sm shadow-black/[0.02]">
@@ -183,14 +184,24 @@ const ProfileTabs = ({
                 aria-label={`Open post${post.caption ? `: ${post.caption}` : ""}`}
                 className="group relative aspect-square overflow-hidden rounded-lg bg-[#F2F0EC] focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#FF4D00] sm:rounded-xl"
               >
+
+                <div
+            className="mb-4 overflow-hidden rounded bg-[#F7F6F3] cursor-pointer"
+            onClick={handlePostClick}
+          >
+          
+          </div>
                 {/* Post image */}
                 {post.image?.url ? (
-                  <img
+                  <div onClick={handlePostClick}>
+                    <img
                     src={post.image.url}
                     alt={post.caption || "Post"}
                     loading="lazy"
                     className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-110 group-focus-visible:scale-105"
                   />
+
+                  </div>
                 ) : (
                   <div className="flex h-full items-center justify-center">
                     <ImageIcon

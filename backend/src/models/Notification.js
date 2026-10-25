@@ -26,16 +26,54 @@ const notificationSchema = new mongoose.Schema(
       default: null,
     },
 
+    comment: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Comment",
+      default: null,
+    },
+
+    conversation: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Conversation",
+      default: null,
+    },
+
+    relatedMessage: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Message",
+      default: null,
+    },
+
     isRead: {
       type: Boolean,
       default: false,
     },
+
+    readAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,
-  }
+  },
 );
 
-const Notification = mongoose.model("Notification", notificationSchema);
+// Recent notifications and unread count queries.
+notificationSchema.index({
+  recipient: 1,
+  createdAt: -1,
+});
+
+notificationSchema.index({
+  recipient: 1,
+  isRead: 1,
+  createdAt: -1,
+});
+
+const Notification = mongoose.model(
+  "Notification",
+  notificationSchema,
+);
 
 export default Notification;

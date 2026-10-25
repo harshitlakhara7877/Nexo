@@ -7,6 +7,7 @@ import authRoutes from "./src/routes/authRoutes.js"
 import userRoutes from "./src/routes/userRoutes.js"
 import messageRoutes from "./src/routes/messageRoutes.js";
 import postRoutes from "./src/routes/postRoutes.js";
+import notificationRoutes from "./src/routes/notificationRoutes.js";
 import { initializeSocket } from "./src/socket/socket.js";
 import http from "http"
 dotenv.config();
@@ -43,6 +44,7 @@ app.use("/auth", authRoutes);
 app.use("/user", userRoutes);
 app.use("/message", messageRoutes);
 app.use("/post", postRoutes);
+app.use("/notifications", notificationRoutes);
 
 
 const PORT = process.env.PORT || 5000;

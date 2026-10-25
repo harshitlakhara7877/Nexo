@@ -49,13 +49,12 @@ const ProfileHeader = ({ user, onSettings }) => {
           <Button
             type="button"
             variant="ghost"
-            // size="icon"
             onClick={onSettings}
             aria-label="Open settings"
             title="Settings"
-            className="cursor-pointer text-[#686A72] hover:bg-[#F7F6F3] hover:text-[#FF4D00]"
+            className="cursor-pointer  text-[#686A72] hover:bg-[#F7F6F3] hover:text-[#FF4D00]"
           >
-            <Settings size={18} strokeWidth={1.8} />
+            <Settings size={25} strokeWidth={1.8} />
           </Button>
         </div>
       </div>

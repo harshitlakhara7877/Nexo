@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { ArrowLeft, ImagePlus, X, Loader2 } from "lucide-react";
+import { ArrowLeft, ImagePlus, X, Loader2, ChevronLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -108,9 +108,9 @@ export default function CreatePost() {
           <button
             type="button"
             onClick={() => navigate(-1)}
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-[#E4E1DB] bg-white text-[#1B1C20] transition hover:bg-[#F7F6F3]"
+            className="text-[#1B1C20] transition hover:bg-[#F7F6F3]"
           >
-            <ArrowLeft size={20} />
+            <ChevronLeft size={28} />
           </button>
 
           <div>

@@ -27,8 +27,10 @@ export const followOrUnfollow = async (userId) => {
   return response.data;
 };
 
-export const searchUsers = async(query, page=1, limit=10) => {
-  const response = await api.get("/user/search", {params:{q:query, page, limit}});
-
+export const searchUsers = async(query, page=1, limit=12, options={}) => {
+  const response = await api.get("/user/search", {
+    params: { q: query, page, limit },
+    signal: options.signal,
+  });
   return response.data;
 }
