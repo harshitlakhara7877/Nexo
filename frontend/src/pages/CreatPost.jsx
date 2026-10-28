@@ -5,13 +5,16 @@ import { toast } from "sonner";
 
 import { createPost } from "@/services/postService";
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024;
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
 const allowedTypes = [
   "image/jpeg",
   "image/png",
   "image/jpg",
   "image/webp",
+  "video/mp4",
+  "video/quicktime",
+  "video/webm",
 ];
 
 export default function CreatePost() {
@@ -20,6 +23,7 @@ export default function CreatePost() {
 
   const [image, setImage] = useState(null);
   const [preview, setPreview] = useState("");
+  const [isVideo, setIsVideo] = useState(false);
   const [caption, setCaption] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -29,16 +33,17 @@ export default function CreatePost() {
     if (!file) return;
 
     if (!allowedTypes.includes(file.type)) {
-      toast.error("Only JPG, PNG, JPEG, and WebP images are allowed");
+      toast.error("Only images (JPG, PNG, WebP) and videos (MP4, WebM) are allowed");
       return;
     }
 
     if (file.size > MAX_FILE_SIZE) {
-      toast.error("Image must be smaller than 5MB");
+      toast.error("File must be smaller than 50MB");
       return;
     }
 
     setImage(file);
+    setIsVideo(file.type.startsWith("video/"));
 
     const previewUrl = URL.createObjectURL(file);
     setPreview(previewUrl);
@@ -50,6 +55,7 @@ export default function CreatePost() {
     }
 
     setImage(null);
+    setIsVideo(false);
     setPreview("");
 
     if (fileInputRef.current) {
@@ -101,24 +107,24 @@ export default function CreatePost() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F7F6F3] px-6 py-8">
+    <div className="min-h-screen mr-50 bg-[#F7F6F3] dark:bg-black px-6 py-8">
       <div className="mx-auto max-w-5xl">
         {/* Header */}
         <div className="mb-6 flex items-center gap-4">
           <button
             type="button"
             onClick={() => navigate(-1)}
-            className="text-[#1B1C20] transition hover:bg-[#F7F6F3]"
+            className="text-[#1B1C20] dark:text-white transition hover:bg-[#F7F6F3] dark:hover:bg-[#1C1C1E] rounded-lg p-1"
           >
             <ChevronLeft size={28} />
           </button>
 
           <div>
-            <h1 className="text-2xl font-semibold text-[#1B1C20]">
+            <h1 className="text-2xl font-semibold text-[#1B1C20] dark:text-white">
               Create Post
             </h1>
 
-            <p className="text-sm text-[#686A72]">
+            <p className="text-sm text-[#686A72] dark:text-neutral-400">
               Share photo & videos with your Friends 
             </p>
           </div>
@@ -127,45 +133,54 @@ export default function CreatePost() {
         {/* Main Card */}
         <form
           onSubmit={handleSubmit}
-          className="overflow-hidden rounded-2xl border border-[#E4E1DB] bg-white shadow-sm"
+          className="overflow-hidden rounded-2xl border border-[#E4E1DB] dark:border-[#262626] bg-white dark:bg-[#121212] shadow-sm"
         >
           <div className="grid min-h-[560px] md:grid-cols-2">
             {/* Image Section */}
-            <div className="flex min-h-[500px] items-center justify-center border-b border-[#E4E1DB] bg-[#F7F6F3] p-6 md:border-b-0 md:border-r">
+            <div className="flex min-h-[500px] items-center justify-center border-b border-[#E4E1DB] dark:border-[#262626] bg-[#F7F6F3] dark:bg-[#0A0A0A] p-6 md:border-b-0 md:border-r">
               {!preview ? (
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex h-full min-h-[450px] w-full flex-col items-center justify-center rounded-xl border-2 border-dashed border-[#E4E1DB] bg-white transition hover:border-[#FF4D00] hover:bg-[#FFF8F5]"
+                  className="flex h-full min-h-[450px] w-full flex-col items-center justify-center rounded-xl border-2 border-dashed border-[#E4E1DB] dark:border-[#333333] bg-white dark:bg-[#1A1A1A] transition hover:border-[#FF4D00] hover:bg-[#FFF8F5] dark:hover:bg-[#1F1510]"
                 >
-                  <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#FFF0E9] text-[#FF4D00]">
+                  <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#FFF0E9] dark:bg-[#2A180E] text-[#FF4D00]">
                     <ImagePlus size={30} />
                   </div>
 
-                  <p className="text-base font-medium text-[#1B1C20]">
-                    Select an image
+                  <p className="text-base font-medium text-[#1B1C20] dark:text-white">
+                    Select a photo or video
                   </p>
 
-                  <p className="mt-1 text-sm text-[#9A9CA3]">
-                    JPG, PNG, JPEG or WebP
+                  <p className="mt-1 text-sm text-[#9A9CA3] dark:text-neutral-500">
+                    JPG, PNG, WebP or MP4
                   </p>
 
-                  <p className="mt-1 text-xs text-[#9A9CA3]">
-                    Maximum size: 5MB
+                  <p className="mt-1 text-xs text-[#9A9CA3] dark:text-neutral-500">
+                    Maximum size: 50MB
                   </p>
                 </button>
               ) : (
                 <div className="relative flex h-full min-h-[450px] w-full items-center justify-center overflow-hidden rounded-xl bg-black">
-                  <img
-                    src={preview}
-                    alt="Post preview"
-                    className="max-h-[560px] max-w-full object-contain"
-                  />
+                  {isVideo ? (
+                    <video
+                      src={preview}
+                      controls
+                      playsInline
+                      className="max-h-[560px] max-w-full object-contain"
+                    />
+                  ) : (
+                    <img
+                      src={preview}
+                      alt="Post preview"
+                      className="max-h-[560px] max-w-full object-contain"
+                    />
+                  )}
 
                   <button
                     type="button"
                     onClick={handleRemoveImage}
-                    className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white transition hover:bg-black"
+                    className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white transition hover:bg-black"
                   >
                     <X size={18} />
                   </button>
@@ -175,7 +190,7 @@ export default function CreatePost() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/jpeg,image/png,image/jpg,image/webp"
+                accept="image/jpeg,image/png,image/jpg,image/webp,video/mp4,video/quicktime,video/webm"
                 onChange={handleImageChange}
                 className="hidden"
               />
@@ -186,7 +201,7 @@ export default function CreatePost() {
               <div>
                 <label
                   htmlFor="caption"
-                  className="mb-2 block text-sm font-medium text-[#1B1C20]"
+                  className="mb-2 block text-sm font-medium text-[#1B1C20] dark:text-white"
                 >
                   Caption
                 </label>
@@ -198,23 +213,23 @@ export default function CreatePost() {
                   maxLength={600}
                   placeholder="Write a caption..."
                   rows={8}
-                  className="w-full resize-none rounded-xl border border-[#E4E1DB] bg-[#F7F6F3] px-4 py-3 text-sm text-[#1B1C20] outline-none transition placeholder:text-[#9A9CA3] focus:border-[#FF4D00] focus:ring-2 focus:ring-[#FF4D00]/10"
+                  className="w-full resize-none rounded-xl border border-[#E4E1DB] dark:border-[#333333] bg-[#F7F6F3] dark:bg-[#1A1A1A] px-4 py-3 text-sm text-[#1B1C20] dark:text-white outline-none transition placeholder:text-[#9A9CA3] dark:placeholder:text-neutral-500 focus:border-[#FF4D00] focus:ring-2 focus:ring-[#FF4D00]/10"
                 />
 
                 <div className="mt-2 flex justify-end">
-                  <span className="text-xs text-[#9A9CA3]">
+                  <span className="text-xs text-[#9A9CA3] dark:text-neutral-500">
                     {caption.length}/600
                   </span>
                 </div>
               </div>
 
               {/* Post Info */}
-              <div className="mt-6 rounded-xl bg-[#F7F6F3] p-4">
-                <p className="text-sm font-medium text-[#1B1C20]">
+              <div className="mt-6 rounded-xl bg-[#F7F6F3] dark:bg-[#1A1A1A] p-4">
+                <p className="text-sm font-medium text-[#1B1C20] dark:text-white">
                   Before you post
                 </p>
 
-                <ul className="mt-2 space-y-1 text-xs text-[#686A72]">
+                <ul className="mt-2 space-y-1 text-xs text-[#686A72] dark:text-neutral-400">
                   <li>• Use a clear image</li>
                   <li>• Keep your caption within 600 characters</li>
                   <li>• Be respectful to the Nexo community</li>
@@ -227,7 +242,7 @@ export default function CreatePost() {
                   type="button"
                   onClick={() => navigate(-1)}
                   disabled={loading}
-                  className="flex-1 rounded-xl border border-[#E4E1DB] px-5 py-3 text-sm font-medium text-[#1B1C20] transition hover:bg-[#F7F6F3] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex-1 rounded-xl border border-[#E4E1DB] dark:border-[#333333] px-5 py-3 text-sm font-medium text-[#1B1C20] dark:text-white transition hover:bg-[#F7F6F3] dark:hover:bg-[#1C1C1E] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Cancel
                 </button>

@@ -7,16 +7,17 @@ const Navbar = () => {
 
   const handleLogout = async () => {
     await logout();
-    navigate("/login");
+    navigate("/");
   };
 
   return (
-    <nav className="border-b bg-white">
+    <nav className="border-b bg-white dark:bg-[#121212] dark:border-[#262626]">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
         <Link
           to="/"
-          className="text-2xl font-bold text-[#FF4D00]"
+          className="flex items-center gap-2.5 text-2xl font-bold text-[#FF4D00]"
         >
+          <img src="/logo.png" alt="Nexo" className="size-7 object-contain" />
           Nexo
         </Link>
 

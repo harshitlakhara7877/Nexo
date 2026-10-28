@@ -44,7 +44,7 @@ export default function Post() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#F7F6F3]">
+      <div className="flex min-h-screen items-center justify-center bg-[#F7F6F3] dark:bg-black">
         <Loader2
           size={30}
           className="animate-spin text-[#FF4D00]"
@@ -58,13 +58,13 @@ export default function Post() {
   }
 
   return (
-    <main className="min-h-screen bg-[#F7F6F3] px-4 py-6">
+    <main className="min-h-screen bg-[#F7F6F3] dark:bg-black px-4 py-6">
       <div className="mx-auto w-full max-w-2xl">
         {/* Back button */}
         <button
           type="button"
           onClick={() => navigate(-1)}
-          className="mb-5 flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-[#686A72] transition hover:bg-white hover:text-[#1B1C20]"
+          className="mb-5 flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-[#686A72] dark:text-neutral-400 transition hover:bg-white dark:hover:bg-[#1C1C1E] hover:text-[#1B1C20] dark:hover:text-white"
         >
           <ArrowLeft size={18} />
           Back

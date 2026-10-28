@@ -5,6 +5,7 @@ import Message from "../models/Message.js";
 import User from "../models/User.js";
 import UserReport from "../models/UserReport.js";
 import { deleteAudioFromCloudinary, deleteFromCloudinary, uploadAudioToCloudinary, uploadToCloudinary } from "../utils/cloudinaryUpload.js";
+import { createNotification } from "../utils/createNotification.js";
 
 const isValidId = (id) => mongoose.isValidObjectId(id);
 
@@ -170,6 +171,9 @@ export const getConversations = async (req, res) => {
             latestMessageByConversation.get(conversationId) || null,
           unreadCount:
             unreadByConversation.get(conversationId) || 0,
+          isMuted: (conversation.mutedBy || []).some(
+            (id) => String(id) === String(currentUserId)
+          ),
           updatedAt: conversation.updatedAt,
         };
       })
@@ -235,6 +239,10 @@ export const getMessage = async (req, res) => {
       });
     }
 
+    const currentUser = await User.findById(senderId)
+      .select("blocked")
+      .lean();
+
     const conversation = await Conversation.findOne(
       getConversationQuery(senderId, receiverId)
     );
@@ -245,6 +253,10 @@ export const getMessage = async (req, res) => {
         conversation: null,
         participant: receiver,
         messages: [],
+        isMuted: false,
+        isBlocked: (currentUser?.blocked || []).some(
+          (id) => String(id) === String(receiverId)
+        ),
       });
     }
 
@@ -282,13 +294,23 @@ export const getMessage = async (req, res) => {
       .sort({ createdAt: 1, _id: 1 })
       .lean();
 
+    const isMuted = (conversation.mutedBy || []).some(
+      (id) => String(id) === String(senderId)
+    );
+    const isBlocked = (currentUser?.blocked || []).some(
+      (id) => String(id) === String(receiverId)
+    );
+
     return res.status(200).json({
       success: true,
       conversation: {
         _id: conversation._id,
+        isMuted,
       },
       participant: receiver,
       messages,
+      isMuted,
+      isBlocked,
     });
   } catch (error) {
     console.error("Get messages error:", error);
@@ -323,6 +345,74 @@ export const sendMessage = async (req, res) => {
         ? req.body.message.trim()
         : "";
 
+    // Parse and validate sharedContent if provided.
+    let sharedContentData = null;
+    let rawSharedContent = req.body?.sharedContent;
+
+    if (typeof rawSharedContent === "string") {
+      try {
+        rawSharedContent = JSON.parse(rawSharedContent);
+      } catch {
+        // Not a JSON string
+      }
+    }
+
+    if (rawSharedContent && typeof rawSharedContent === "object") {
+      const rawUrl =
+        typeof rawSharedContent.url === "string"
+          ? rawSharedContent.url.trim()
+          : "";
+
+      if (!rawUrl) {
+        return res.status(400).json({
+          success: false,
+          message: "A valid URL is required for shared content.",
+        });
+      }
+
+      let parsedUrl;
+      try {
+        parsedUrl = new URL(rawUrl);
+        if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+          throw new Error("Invalid URL protocol");
+        }
+      } catch {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid URL provided for shared content.",
+        });
+      }
+
+      const domain = parsedUrl.hostname || parsedUrl.host;
+      const caption =
+        typeof rawSharedContent.caption === "string"
+          ? rawSharedContent.caption.trim().slice(0, 2000)
+          : "";
+
+      let postId = null;
+      if (rawSharedContent.postId && isValidId(rawSharedContent.postId)) {
+        postId = rawSharedContent.postId;
+      } else {
+        const match = parsedUrl.pathname.match(/\/post\/([a-fA-F0-9]{24})/);
+        if (match && isValidId(match[1])) {
+          postId = match[1];
+        }
+      }
+
+      const sharedNote =
+        typeof rawSharedContent.message === "string"
+          ? rawSharedContent.message.trim()
+          : "";
+
+      sharedContentData = {
+        url: rawUrl,
+        domain,
+        caption,
+        ...(sharedNote && { message: sharedNote }),
+        ...(postId && { postId }),
+      };
+    }
+
     // Validate recipient.
     if (!isValidId(receiverId)) {
       return res.status(400).json({
@@ -346,10 +436,10 @@ export const sendMessage = async (req, res) => {
       });
     }
 
-    if (!imageFile && !audioFile && !messageText) {
+    if (!imageFile && !audioFile && !messageText && !sharedContentData) {
       return res.status(400).json({
         success: false,
-        message: "A message or attachment is required.",
+        message: "A message, attachment, or shared content is required.",
       });
     }
 
@@ -376,6 +466,27 @@ export const sendMessage = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: "Recipient not found.",
+      });
+    }
+
+    // Check block status
+    const [senderUser, receiverUser] = await Promise.all([
+      User.findById(senderId).select("blocked").lean(),
+      User.findById(receiverId).select("blocked").lean(),
+    ]);
+
+    const isBlocked =
+      (senderUser?.blocked || []).some(
+        (id) => String(id) === String(receiverId)
+      ) ||
+      (receiverUser?.blocked || []).some(
+        (id) => String(id) === String(senderId)
+      );
+
+    if (isBlocked) {
+      return res.status(403).json({
+        success: false,
+        message: "Unable to send message. User is blocked.",
       });
     }
 
@@ -418,13 +529,19 @@ export const sendMessage = async (req, res) => {
       ? "voice"
       : imageFile
         ? "image"
-        : "text";
+        : sharedContentData
+          ? "share"
+          : "text";
 
     const newMessage = await Message.create({
       conversation: conversation._id,
       sender: senderId,
       type,
-      message: messageText,
+      message: messageText || (sharedContentData ? sharedContentData.url : ""),
+
+      ...(sharedContentData && {
+        sharedContent: sharedContentData,
+      }),
 
       ...(uploadedImage && {
         image: {
@@ -439,8 +556,8 @@ export const sendMessage = async (req, res) => {
           publicId: uploadedAudio.public_id,
           ...(Number.isFinite(Number(req.body?.duration)) &&
             Number(req.body.duration) >= 0 && {
-              duration: Number(req.body.duration),
-            }),
+            duration: Number(req.body.duration),
+          }),
         },
       }),
     });
@@ -469,6 +586,21 @@ export const sendMessage = async (req, res) => {
       conversationId: String(conversation._id),
       message: newMessage,
     });
+
+    const isRecipientMuted = (conversation.mutedBy || []).some(
+      (id) => String(id) === String(receiverId)
+    );
+
+    if (!isRecipientMuted) {
+      await createNotification({
+        recipient: receiverId,
+        sender: senderId,
+        type: "message",
+        conversation: conversation._id,
+        relatedMessage: newMessage._id,
+        io,
+      });
+    }
 
     return res.status(201).json({
       success: true,
@@ -649,7 +781,7 @@ export const markConversationRead = async (req, res) => {
       io?.to(`user:${otherUserId}`).emit("message:read", {
         conversationId: String(conversation._id),
         messageIds: messageIds.map((id) => String(id)),
-        readAt:new Date(),
+        readAt: new Date(),
       });
     }
 
@@ -818,6 +950,74 @@ export const reportUser = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Unable to submit report.",
+    });
+  }
+};
+
+// ============================================================
+// PATCH /message/mute/:id
+// Toggle mute conversation for the current user.
+// ============================================================
+
+export const toggleMuteConversation = async (req, res) => {
+  try {
+    const currentUserId = req.id;
+    const otherUserId = req.params.id;
+
+    if (!isValidId(otherUserId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid user ID.",
+      });
+    }
+
+    let conversation = await Conversation.findOne(
+      getConversationQuery(currentUserId, otherUserId)
+    );
+
+    if (!conversation) {
+      conversation = await Conversation.create({
+        participants: [currentUserId, otherUserId],
+        message: [],
+        deletedChatFor: [],
+        mutedBy: [currentUserId],
+      });
+      return res.status(200).json({
+        success: true,
+        isMuted: true,
+        message: "Conversation muted.",
+      });
+    }
+
+    if (!conversation.mutedBy) {
+      conversation.mutedBy = [];
+    }
+
+    const alreadyMuted = conversation.mutedBy.some(
+      (id) => String(id) === String(currentUserId)
+    );
+
+    if (alreadyMuted) {
+      conversation.mutedBy = conversation.mutedBy.filter(
+        (id) => String(id) !== String(currentUserId)
+      );
+    } else {
+      conversation.mutedBy.push(currentUserId);
+    }
+
+    await conversation.save();
+
+    return res.status(200).json({
+      success: true,
+      isMuted: !alreadyMuted,
+      message: !alreadyMuted ? "Conversation muted." : "Conversation unmuted.",
+    });
+  } catch (error) {
+    console.error("Toggle mute conversation error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to toggle mute state.",
     });
   }
 };

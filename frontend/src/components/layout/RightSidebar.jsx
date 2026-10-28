@@ -61,7 +61,7 @@ const RightSidebar = () => {
   };
 
   return (
-    <div className="top-0 right-0 h-screen w-100 border-l border-[#E4E1DB] bg-[#FAFAFA] px-5 py-7 ">
+    <div className="top-0 fixed right-6 h-screen w-100 bg-[#FAFAFA] dark:bg-black px-5 py-7 text-[#1B1C20] dark:text-white">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
@@ -70,7 +70,7 @@ const RightSidebar = () => {
            className="cursor-pointer">
             <Avatar className="size-11">
             <AvatarImage src={user?.profilePicture?.url} alt="auth_image" />
-            <AvatarFallback>{user.username?.charAt(0).toUpperCase() || "U"}</AvatarFallback>
+            <AvatarFallback className="dark:bg-[#2A180E] dark:text-[#FF4D00]">{user?.username?.charAt(0).toUpperCase() || "U"}</AvatarFallback>
           </Avatar>
           </button>
 
@@ -79,9 +79,9 @@ const RightSidebar = () => {
             type="button"
             onClick={() => navigate("/profile")}
             className="cursor-pointer hover:text-orange-600 hover:font-semibold">
-              <h1>{user?.username}</h1>
+              <h1 className="font-semibold text-sm">{user?.username}</h1>
             </button>
-            <p>{user?.bio}</p>
+            <p className="text-xs text-[#686A72] dark:text-neutral-400">{user?.bio}</p>
           </div>
         </div>
 
@@ -89,7 +89,7 @@ const RightSidebar = () => {
           <button
           type="button"
           onClick={() => navigate("/profile/edit")}
-          className="text-orange-500 font-semibold hover:font-bold cursor-pointer">
+          className="text-orange-500 font-semibold hover:font-bold cursor-pointer text-sm">
             Edit
           </button>
       </div>

@@ -191,21 +191,21 @@ const SuggestedUser = () => {
     <section className="my-6 w-full">
       {/* Heading */}
       <div className="mb-4">
-        <h2 className="text-base font-semibold tracking-tight text-[#1B1C20]">
+        <h2 className="text-base font-semibold tracking-tight text-[#1B1C20] dark:text-white">
           Suggested for you
         </h2>
       </div>
 
       {/* Users */}
       {suggestedUsers.length === 0 ? (
-        <div className="rounded-xl border border-dashed p-5 text-center">
+        <div className="rounded-xl border border-dashed border-[#E4E1DB] dark:border-[#262626] p-5 text-center">
           <Users className="mx-auto mb-2 size-6 text-muted-foreground" />
 
-          <p className="text-sm font-medium">
+          <p className="text-sm font-medium text-[#1B1C20] dark:text-white">
             You're all caught up
           </p>
 
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="mt-1 text-xs text-muted-foreground dark:text-neutral-400">
             No suggestions available right now.
           </p>
         </div>
@@ -217,6 +217,7 @@ const SuggestedUser = () => {
               const isFollowing = Boolean(followingStates[id]);
               const isProcessing =
                 String(followingUserId) === String(id);
+              const username = suggestedUser.username;
 
               return (
                 <div
@@ -238,7 +239,7 @@ const SuggestedUser = () => {
                         alt={suggestedUser.username || "User"}
                         />
 
-                      <AvatarFallback className="bg-orange-50 font-semibold text-[#FF4D00]">
+                      <AvatarFallback className="bg-orange-50 font-semibold text-[#FF4D00] dark:bg-[#2A180E]">
                         {suggestedUser.username
                           ?.charAt(0)
                           ?.toUpperCase() || "U"}
@@ -252,12 +253,12 @@ const SuggestedUser = () => {
                     onClick={() => navigate(`/profile/${username}`)}
                     className="min-w-0 flex-1 text-left"
                   >
-                    <span className="block truncate text-sm font-semibold text-[#1B1C20] hover:underline">
+                    <span className="block truncate text-sm font-semibold text-[#1B1C20] dark:text-white hover:underline">
                       {suggestedUser.name ||
                         suggestedUser.username}
                     </span>
 
-                    <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                    <span className="mt-0.5 block truncate text-xs text-muted-foreground dark:text-neutral-400">
                       @{suggestedUser.username || "user"}
                     </span>
                   </button>
@@ -271,8 +272,8 @@ const SuggestedUser = () => {
                     onClick={() => handleFollow(id)}
                     className={`h-8 shrink-0 px-2 text-xs cursor-pointer font-semibold ${
                       isFollowing
-                        ? "border-border text-foreground hover:bg-muted"
-                        : "text-[#FF4D00] hover:bg-orange-100 hover:text-[#D9430A]"
+                        ? "border-border text-foreground hover:bg-muted dark:border-[#333] dark:hover:bg-[#222]"
+                        : "text-[#FF4D00] hover:bg-orange-100 dark:hover:bg-[#2A180E] hover:text-[#D9430A]"
                     }`}
                   >
                     {isProcessing ? (

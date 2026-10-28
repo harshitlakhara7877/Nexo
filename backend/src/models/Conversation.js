@@ -34,6 +34,13 @@ const conversationSchema = new mongoose.Schema(
         },
       },
     ],
+
+    mutedBy: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
   },
   {
     timestamps: true,

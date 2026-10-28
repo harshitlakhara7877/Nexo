@@ -1,7 +1,6 @@
 import { useState } from "react";
-import Register from "./pages/Register";
 import { Route, Routes } from "react-router-dom";
-import Login from "./pages/Login";
+import Landing from "./pages/Landing";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Home from "./pages/Home";
 import Profile from "./pages/Profile";
@@ -15,13 +14,15 @@ import Search from "./pages/Search";
 import Settings from "./components/profile/Settings";
 import Bookmarks from "./components/Settings/Bookmarks";
 import Messages from "./pages/Message";
+import Notifications from "./pages/Notifications";
 
 function App() {
   return (
     <>
       <Routes>
-        <Route path="/register" element={<Register />} />
-        <Route path="/login" element={<Login />} />
+        <Route path="/" element={<Landing />} />
+        <Route path="/register" element={<Landing initialMode="register" />} />
+        <Route path="/login" element={<Landing initialMode="login" />} />
 
         <Route element={<ProtectedRoute />}>
 
@@ -30,6 +31,7 @@ function App() {
             <Route path="/explore" element={<Explore />} />
             <Route path="/search" element={<Search />} />
             <Route path="/messages" element={<Messages />} />
+            <Route path="/notifications" element={<Notifications />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/bookmarks" element={<Bookmarks />} />

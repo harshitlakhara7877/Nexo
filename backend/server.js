@@ -8,6 +8,8 @@ import userRoutes from "./src/routes/userRoutes.js"
 import messageRoutes from "./src/routes/messageRoutes.js";
 import postRoutes from "./src/routes/postRoutes.js";
 import notificationRoutes from "./src/routes/notificationRoutes.js";
+import storyRoutes from "./src/routes/storyRoutes.js";
+import { getPostPreview } from "./src/controllers/postController.js";
 import { initializeSocket } from "./src/socket/socket.js";
 import http from "http"
 dotenv.config();
@@ -40,10 +42,23 @@ app.get("/", (req, res)=>{
   })
 });
 
+// Open Graph link preview for WhatsApp and other social crawlers
+app.get(["/p/:id", "/post/:id"], (req, res, next) => {
+  const userAgent = req.headers["user-agent"] || "";
+  const isCrawler = /whatsapp|facebookexternalhit|twitterbot|linkedinbot|embedly|quora link preview|showyoubot|outbrain|pinterest|slackbot|vkShare|W3C_Validator|redditbot|Applebot|Discordbot/i.test(
+    userAgent
+  );
+  if (isCrawler || req.path.startsWith("/p/")) {
+    return getPostPreview(req, res);
+  }
+  next();
+});
+
 app.use("/auth", authRoutes);
 app.use("/user", userRoutes);
 app.use("/message", messageRoutes);
 app.use("/post", postRoutes);
+app.use("/story", storyRoutes);
 app.use("/notifications", notificationRoutes);
 
 

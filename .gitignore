@@ -1,3 +1,25 @@
-node_modules
+# Dependencies
+node_modules/
+
+# Environment files and credentials
 .env
+.env.*
+!.env.example
+!.env.sample
+
+# Build outputs
+dist/
+build/
+coverage/
+.next/
+out/
+
+# Local-only configuration and editor files
+*.local
+.vscode/
+.idea/
+.DS_Store
+
+# Logs and archives
+*.log
 *.zip

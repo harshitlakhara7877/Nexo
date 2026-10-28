@@ -28,6 +28,12 @@ const getLastMessagePreview = (message, currentUserId) => {
   const isOwnMessage =
     getId(message.sender) === getId(currentUserId);
 
+  if (message.type === "share" || Boolean(message.sharedContent?.url)) {
+    return isOwnMessage
+      ? "You: Shared a post"
+      : `${getName(message.sender)} shared a post`;
+  }
+
   const isAttachment =
     message.type === "image" ||
     message.type === "voice" ||
@@ -73,7 +79,7 @@ function UserAvatar({ user }) {
   const name = getName(user);
 
   return (
-    <span className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#FFF0E8] font-semibold text-[#FF4D00]">
+    <span className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#FFF0E8] font-semibold text-[#FF4D00] dark:bg-[#2A180E]">
       {user?.profilePicture?.url ? (
         <img
           src={user.profilePicture.url}
@@ -215,33 +221,33 @@ export default function ConversationList({
 
   return (
     <aside
-      className={`h-full min-h-0 w-full shrink-0 flex-col border-r border-[#E4E1DB] bg-white md:flex md:w-[340px] lg:w-[400px] ${
+      className={`h-full min-h-0 w-full shrink-0 flex-col border-r border-[#E4E1DB] bg-white dark:border-[#262626] dark:bg-black md:flex md:w-[340px] lg:w-[400px] ${
         mobileChatOpen ? "hidden" : "flex"
       }`}
     >
       {/* Header and search */}
-      <header className="shrink-0 border-b border-[#EEECE8] px-5 py-5">
+      <header className="shrink-0 border-b border-[#EEECE8] dark:border-[#262626] px-5 py-5">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[#1B1C20]">
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[#1B1C20] dark:text-white">
               {user?.username}
             </h1>
           </div>
 
-          <span className="flex size-10 items-center justify-center rounded-xl  text-[#FF4D00]">
+          <span className="flex size-10 items-center justify-center rounded-xl text-[#FF4D00]">
             <Edit size={20} />
           </span>
         </div>
 
-        <div className="mt-5 flex items-center gap-2 rounded-xl border border-[#E4E1DB] bg-[#F7F6F3] px-3 focus-within:border-[#FF4D00]">
-          <Search size={17} className="shrink-0 text-[#85858D]" />
+        <div className="mt-5 flex items-center gap-2 rounded-xl border border-[#E4E1DB] bg-[#F7F6F3] dark:border-[#262626] dark:bg-[#181818] px-3 focus-within:border-[#FF4D00]">
+          <Search size={17} className="shrink-0 text-[#85858D] dark:text-neutral-400" />
 
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search people or messages"
             aria-label="Search people or conversations"
-            className="h-11 min-w-0 flex-1 bg-transparent text-sm text-[#1B1C20] outline-none placeholder:text-[#9A9CA3]"
+            className="h-11 min-w-0 flex-1 bg-transparent text-sm text-[#1B1C20] dark:text-white outline-none placeholder:text-[#9A9CA3] dark:placeholder:text-neutral-500"
           />
 
           {search && (
@@ -249,7 +255,7 @@ export default function ConversationList({
               type="button"
               onClick={() => setSearch("")}
               aria-label="Clear search"
-              className="flex size-7 items-center justify-center rounded-full text-[#85858D] hover:bg-white hover:text-[#1B1C20]"
+              className="flex size-7 items-center justify-center rounded-full text-[#85858D] hover:bg-white hover:text-[#1B1C20] dark:hover:bg-[#202020] dark:hover:text-white"
             >
               <X size={15} />
             </button>
@@ -260,13 +266,13 @@ export default function ConversationList({
       <div className="min-h-0 flex-1 overflow-y-auto">
         {/* People search */}
         {search.trim().length >= 2 && (
-          <section className="border-b border-[#EEECE8] p-3">
-            <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-[#85858D]">
+          <section className="border-b border-[#EEECE8] dark:border-[#262626] p-3">
+            <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-[#85858D] dark:text-neutral-400">
               People
             </p>
 
             {loadingPeople ? (
-              <div className="flex items-center gap-2 px-3 py-4 text-sm text-[#686A72]">
+              <div className="flex items-center gap-2 px-3 py-4 text-sm text-[#686A72] dark:text-neutral-400">
                 <LoaderCircle
                   size={16}
                   className="animate-spin text-[#FF4D00]"
@@ -280,29 +286,29 @@ export default function ConversationList({
                     type="button"
                     key={person._id}
                     onClick={() => selectContact(person)}
-                    className="flex w-full items-center gap-3 rounded-xl p-3 text-left hover:bg-[#FFF7F2]"
+                    className="flex w-full items-center gap-3 rounded-xl p-3 text-left hover:bg-[#FFF7F2] dark:hover:bg-[#1A1A1A]"
                   >
                     <UserAvatar user={person} />
 
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold text-[#1B1C20]">
+                      <span className="block truncate text-sm font-semibold text-[#1B1C20] dark:text-white">
                         {getName(person)}
                       </span>
 
-                      <span className="mt-0.5 block truncate text-xs text-[#686A72]">
+                      <span className="mt-0.5 block truncate text-xs text-[#686A72] dark:text-neutral-400">
                         @{person.username}
                       </span>
                     </span>
 
                     <ArrowUpRight
                       size={16}
-                      className="text-[#85858D]"
+                      className="text-[#85858D] dark:text-neutral-400"
                     />
                   </button>
                 ))}
               </div>
             ) : (
-              <p className="px-3 py-3 text-xs text-[#85858D]">
+              <p className="px-3 py-3 text-xs text-[#85858D] dark:text-neutral-400">
                 No matching people found.
               </p>
             )}
@@ -311,7 +317,7 @@ export default function ConversationList({
 
         {/* Conversation list */}
         <div className="flex items-center justify-between px-5 pb-2 pt-4">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-[#85858D]">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-[#85858D] dark:text-neutral-400">
             Conversations
           </h2>
           
@@ -324,18 +330,18 @@ export default function ConversationList({
                 key={index}
                 className="flex animate-pulse items-center gap-3"
               >
-                <div className="size-11 rounded-full bg-[#EEECE8]" />
+                <div className="size-11 rounded-full bg-[#EEECE8] dark:bg-[#262626]" />
 
                 <div className="flex-1 space-y-2">
-                  <div className="h-3 w-28 rounded bg-[#EEECE8]" />
-                  <div className="h-3 w-36 rounded bg-[#EEECE8]" />
+                  <div className="h-3 w-28 rounded bg-[#EEECE8] dark:bg-[#262626]" />
+                  <div className="h-3 w-36 rounded bg-[#EEECE8] dark:bg-[#262626]" />
                 </div>
               </div>
             ))}
           </div>
         ) : error ? (
           <div className="px-5 py-6">
-            <p className="text-sm text-[#686A72]">{error}</p>
+            <p className="text-sm text-[#686A72] dark:text-neutral-400">{error}</p>
 
             <button
               type="button"
@@ -363,19 +369,19 @@ export default function ConversationList({
                   onClick={() => selectContact(person)}
                   className={`flex w-full items-center gap-3 rounded-xl p-3 text-left transition ${
                     isSelected
-                      ? "bg-[#FFF0E8]"
-                      : "hover:bg-[#F7F6F3]"
+                      ? "bg-[#FFF0E8] dark:bg-[#2A180E]"
+                      : "hover:bg-[#F7F6F3] dark:hover:bg-[#181818]"
                   }`}
                 >
                   <UserAvatar user={person} />
 
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center justify-between gap-2">
-                      <span className="truncate text-sm font-semibold text-[#1B1C20]">
+                      <span className="truncate text-sm font-semibold text-[#1B1C20] dark:text-white">
                         {getName(person)}
                       </span>
 
-                      <span className="shrink-0 text-[10px] text-[#85858D]">
+                      <span className="shrink-0 text-[10px] text-[#85858D] dark:text-neutral-400">
                         {formatTime(
                           lastMessage?.createdAt ||
                             conversation.updatedAt
@@ -384,7 +390,7 @@ export default function ConversationList({
                     </span>
 
                     <span className="mt-1 flex items-center gap-2">
-                      <span className="min-w-0 flex-1 truncate text-xs text-[#686A72]">
+                      <span className="min-w-0 flex-1 truncate text-xs text-[#686A72] dark:text-neutral-400">
                         {getLastMessagePreview(lastMessage, user?._id)}
                       </span>
 
@@ -403,17 +409,17 @@ export default function ConversationList({
           </div>
         ) : (
           <div className="px-5 py-10 text-center">
-            <span className="mx-auto flex size-12 items-center justify-center rounded-full bg-[#FFF0E8] text-[#FF4D00]">
+            <span className="mx-auto flex size-12 items-center justify-center rounded-full bg-[#FFF0E8] dark:bg-[#2A180E] text-[#FF4D00]">
               <Users size={21} />
             </span>
 
-            <p className="mt-3 text-sm font-semibold text-[#1B1C20]">
+            <p className="mt-3 text-sm font-semibold text-[#1B1C20] dark:text-white">
               {search
                 ? "No matching conversations"
                 : "No conversations yet"}
             </p>
 
-            <p className="mt-1 text-xs leading-5 text-[#85858D]">
+            <p className="mt-1 text-xs leading-5 text-[#85858D] dark:text-neutral-400">
               Search for someone above to start chatting.
             </p>
           </div>

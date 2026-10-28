@@ -14,7 +14,9 @@ export const sendMessage = async (receiverId, content) => {
   const payload =
     content instanceof FormData
       ? content
-      : { message: content };
+      : typeof content === "object" && content !== null
+        ? content
+        : { message: content };
 
   const response = await api.post(
     `/message/send/${receiverId}`,
@@ -42,5 +44,10 @@ export const deleteConversation = async (userId) => {
 export const reportUser = async (userId, payload) => {
   const response = await api.post(`/message/report/${userId}`,payload);
 
+  return response.data;
+};
+
+export const toggleMuteConversation = async (userId) => {
+  const response = await api.patch(`/message/mute/${userId}`);
   return response.data;
 };

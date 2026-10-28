@@ -37,7 +37,6 @@ export const getComments = async(postId) => {
   return response.data;
 }
 
-
 export const getDiscoverPosts = async (page = 1, limit = 12, options={}) => {
   const response = await api.get("/post/discover", {
     params: { page, limit },
@@ -80,6 +79,11 @@ export const getBookmarkedPosts = async () => {
 
 export const toggleBookmark = async (postId) => {
   const response = await api.post(`/post/${postId}/bookmark`);
+  return response.data;
+};
+
+export const deletePost = async (postId) => {
+  const response = await api.delete(`/post/delete/${postId}`);
   return response.data;
 };
 

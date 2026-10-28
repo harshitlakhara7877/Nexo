@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Heart,
@@ -8,6 +8,10 @@ import {
   Bookmark,
   MoreHorizontal,
   UserRound,
+  Volume2,
+  VolumeX,
+  Play,
+  Pause,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -17,10 +21,15 @@ import {
   getFeed,
   likePost,
   dislikePost,
+  toggleBookmark,
+  deletePost,
 } from "@/services/postService";
+import { reportUser } from "@/services/messageService";
 
-// Adjust this path if CommentDialog is in a different folder.
 import CommentDialog from "@/components/post/CommentDialog";
+import SharePostDialog from "@/components/post/SharePostDialog";
+import ReportDialog from "@/components/message/ReportDialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 
 const getId = (value) => {
   if (!value) return "";
@@ -33,6 +42,9 @@ const getId = (value) => {
 function ExplorePost({ post, user }) {
   const navigate = useNavigate();
   const [openComment, setOpenComment] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
 
   const author = post?.author;
   const postId = getId(post?._id);
@@ -75,35 +87,123 @@ function ExplorePost({ post, user }) {
 
   const profileImage = author?.profilePicture?.url;
 
+  const isVideo = Boolean(
+    post?.mediaType === "video" ||
+      post?.image?.url?.match(/\.(mp4|mov|webm|m4v)($|\?)/i)
+  );
+  const videoRef = useRef(null);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [playPauseIndicator, setPlayPauseIndicator] = useState(null);
+  const [expandedCaption, setExpandedCaption] = useState(false);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !isVideo) return;
+
+    video.muted = isMuted;
+
+    const playVideo = async () => {
+      try {
+        await video.play();
+        setIsPlaying(true);
+      } catch {
+        // Autoplay with audio was rejected by browser policy
+        video.muted = true;
+        setIsMuted(true);
+        try {
+          await video.play();
+          setIsPlaying(true);
+        } catch {
+          setIsPlaying(false);
+        }
+      }
+    };
+
+    playVideo();
+  }, [post?.image?.url, isVideo]);
+
+  // Turn off autoplay on the background reel when comment dialog is open
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !isVideo) return;
+
+    if (openComment) {
+      video.pause();
+      setIsPlaying(false);
+    } else {
+      video.play().then(() => setIsPlaying(true)).catch(() => {});
+    }
+  }, [openComment, isVideo]);
+
+  const flashIndicator = (type) => {
+    setPlayPauseIndicator(type);
+    setTimeout(() => setPlayPauseIndicator(null), 600);
+  };
+
+  const togglePlayPause = (e) => {
+    e.stopPropagation();
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (video.paused) {
+      video
+        .play()
+        .then(() => {
+          setIsPlaying(true);
+          flashIndicator("play");
+        })
+        .catch(() => {});
+    } else {
+      video.pause();
+      setIsPlaying(false);
+      flashIndicator("pause");
+    }
+  };
+
+  const toggleMute = (e) => {
+    e.stopPropagation();
+    const video = videoRef.current;
+    if (!video) return;
+    const nextMuted = !isMuted;
+    video.muted = nextMuted;
+    setIsMuted(nextMuted);
+  };
+
   const handleProfileClick = () => {
     if (author?.username) {
       navigate(`/profile/${author.username}`);
     }
   };
 
-  // LIKE / DISLIKE
+  // LIKE / DISLIKE with optimistic update & rollback
   const handleLike = async () => {
     if (!postId || likeLoading) return;
 
-    try {
-      setLikeLoading(true);
+    const prevLiked = isLiked;
+    const prevCount = likeCount;
+    const nextLiked = !prevLiked;
+    const nextCount = Math.max(0, prevCount + (nextLiked ? 1 : -1));
 
-      const response = isLiked
-        ? await dislikePost(postId)
-        : await likePost(postId);
+    setIsLiked(nextLiked);
+    setLikeCount(nextCount);
+    setLikeLoading(true);
+
+    try {
+      const response = nextLiked
+        ? await likePost(postId)
+        : await dislikePost(postId);
 
       if (!response?.success) {
         throw new Error(response?.message || "Unable to update like.");
       }
 
-      setIsLiked(response.isLiked ?? !isLiked);
-
-      setLikeCount(
-        typeof response.likeCount === "number"
-          ? response.likeCount
-          : Math.max(0, likeCount + (isLiked ? -1 : 1))
-      );
+      if (typeof response.likeCount === "number") {
+        setLikeCount(response.likeCount);
+      }
     } catch (error) {
+      setIsLiked(prevLiked);
+      setLikeCount(prevCount);
       toast.error(
         error.response?.data?.message ||
           error.message ||
@@ -120,8 +220,6 @@ function ExplorePost({ post, user }) {
 
     try {
       setFollowLoading(true);
-
-      // Uses the existing follow endpoint.
       const response = await api.post(`/user/follow/${authorId}`);
 
       if (response.data?.success === false) {
@@ -141,31 +239,31 @@ function ExplorePost({ post, user }) {
     }
   };
 
-  // COMMENTS: reuse the existing CommentDialog.
+  // COMMENTS
   const handleCommentAdded = () => {
     setCommentCount((count) => count + 1);
   };
 
-  // BOOKMARK
+  // BOOKMARK with optimistic update & rollback
   const handleBookmark = async () => {
     if (!postId || bookmarkLoading) return;
 
+    const prevBookmarked = isBookmarked;
+    setIsBookmarked(!prevBookmarked);
+    setBookmarkLoading(true);
+
     try {
-      setBookmarkLoading(true);
-
-      const response = await api.post(`/post/${postId}/bookmark`);
-
-      if (!response.data?.success) {
-        throw new Error(
-          response.data?.message || "Unable to update bookmark."
-        );
+      const response = await toggleBookmark(postId);
+      if (!response?.success) {
+        throw new Error(response?.message || "Unable to update bookmark.");
       }
 
-      setIsBookmarked((previous) => !previous);
+      setIsBookmarked(Boolean(response.isBookmarked));
       toast.success(
-        isBookmarked ? "Removed from bookmarks" : "Post bookmarked"
+        response.isBookmarked ? "Post saved" : "Removed from bookmarks"
       );
     } catch (error) {
+      setIsBookmarked(prevBookmarked);
       toast.error(
         error.response?.data?.message ||
           error.message ||
@@ -176,60 +274,97 @@ function ExplorePost({ post, user }) {
     }
   };
 
-  // SHARE / SEND
-  const handleShare = async () => {
+  // COPY LINK
+  const handleCopyLink = () => {
     const url = `${window.location.origin}/post/${postId}`;
+    navigator.clipboard.writeText(url);
+    toast.success("Link copied to clipboard");
+    setMoreOpen(false);
+  };
 
+  // DELETE POST (if own post)
+  const handleDeletePost = async () => {
+    setMoreOpen(false);
     try {
-      if (navigator.share) {
-        await navigator.share({
-          title: `Post by @${author?.username || "user"}`,
-          url,
-        });
-      } else {
-        await navigator.clipboard.writeText(url);
-        toast.success("Post link copied");
-      }
-    } catch (error) {
-      if (error.name !== "AbortError") {
-        toast.error("Unable to share this post.");
-      }
+      await deletePost(postId);
+      toast.success("Post deleted");
+      window.location.reload();
+    } catch (err) {
+      toast.error("Failed to delete post");
     }
   };
 
   return (
     <>
       <section
-        className="relative h-[100dvh] min-h-[100dvh] w-full snap-start snap-always overflow-hidden bg-white"
+        className="relative h-[100dvh] min-h-[100dvh] w-full snap-start snap-always overflow-hidden bg-white dark:bg-black"
         aria-label={`Post by @${author?.username || "user"}`}
       >
-        {/* Full-height portrait image, centered in the viewport */}
+        {/* Full-height portrait media, centered in viewport */}
         <article
-          className="absolute inset-y-0 left-1/2 h-full -translate-x-1/2 overflow-hidden bg-[#F7F6F3]"
+          className="absolute inset-y-0 left-1/2 h-full -translate-x-1/2 overflow-hidden bg-[#F7F6F3] dark:bg-black"
           style={{
             aspectRatio: "9 / 16",
             width: "auto",
             maxWidth: "min(56.25dvh, 78vw)",
           }}
         >
-          <button
-            type="button"
-            onClick={() => navigate(`/post/${postId}`)}
-            className="block h-full w-full cursor-pointer"
-            aria-label={`Open post by @${author?.username || "user"}`}
-          >
-            {post?.image?.url ? (
-              <img
-                src={post.image.url}
-                alt={post.caption || `Post by @${author?.username || "user"}`}
-                className="h-full w-full object-cover"
+          {isVideo ? (
+            <div
+              className="relative h-full w-full cursor-pointer select-none"
+              onClick={togglePlayPause}
+            >
+              <video
+                ref={videoRef}
+                src={post?.image?.url}
+                loop
+                playsInline
+                className="h-full w-full object-cover pointer-events-none"
               />
-            ) : (
-              <span className="flex h-full items-center justify-center text-sm text-[#686A72]">
-                Image unavailable
-              </span>
-            )}
-          </button>
+
+              {/* Mute / Unmute Button */}
+              <button
+                type="button"
+                onClick={toggleMute}
+                className="absolute top-4 right-4 z-20 flex size-9 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur transition hover:bg-black/80"
+                title={isMuted ? "Unmute" : "Mute"}
+              >
+                {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+              </button>
+
+              {/* Centered Play/Pause flash animation */}
+              {playPauseIndicator && (
+                <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
+                  <div className="animate-[ping_0.5s_ease-out_forwards] rounded-full bg-black/60 p-4 backdrop-blur">
+                    {playPauseIndicator === "pause" ? (
+                      <Pause size={40} className="text-white fill-white" />
+                    ) : (
+                      <Play size={40} className="text-white fill-white ml-0.5" />
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => navigate(`/post/${postId}`)}
+              className="block h-full w-full cursor-pointer"
+              aria-label={`Open post by @${author?.username || "user"}`}
+            >
+              {post?.image?.url ? (
+                <img
+                  src={post.image.url}
+                  alt={post.caption || `Post by @${author?.username || "user"}`}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <span className="flex h-full items-center justify-center text-sm text-[#686A72] dark:text-neutral-400">
+                  Image unavailable
+                </span>
+              )}
+            </button>
+          )}
         </article>
 
         {/* Author details: outside the image, bottom-left */}
@@ -248,20 +383,20 @@ function ExplorePost({ post, user }) {
               <img
                 src={profileImage}
                 alt={author?.username || "User"}
-                className="h-11 w-11 rounded-full border border-[#E4E1DB] object-cover"
+                className="h-11 w-11 rounded-full border border-[#E4E1DB] dark:border-[#262626] object-cover"
               />
             ) : (
-              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#F7F6F3]">
-                <UserRound size={20} />
+              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#F7F6F3] dark:bg-[#202020]">
+                <UserRound size={20} className="text-[#1B1C20] dark:text-white" />
               </span>
             )}
 
             <span className="min-w-0">
-              <span className="block truncate text-sm font-semibold text-[#1B1C20]">
+              <span className="block truncate text-sm font-semibold text-[#1B1C20] dark:text-white">
                 @{author?.username || "user"}
               </span>
               {author?.name && (
-                <span className="block truncate text-xs text-[#686A72]">
+                <span className="block truncate text-xs text-[#686A72] dark:text-neutral-400">
                   {author.name}
                 </span>
               )}
@@ -275,7 +410,7 @@ function ExplorePost({ post, user }) {
               disabled={followLoading}
               className={`w-fit rounded-full px-4 py-1.5 text-xs font-semibold transition disabled:opacity-50 ${
                 isFollowing
-                  ? "border border-[#E4E1DB] text-[#1B1C20] hover:bg-[#F7F6F3]"
+                  ? "border border-[#E4E1DB] dark:border-[#262626] text-[#1B1C20] dark:text-white hover:bg-[#F7F6F3] dark:hover:bg-[#1E1E1E]"
                   : "bg-[#FF4D00] text-white hover:bg-[#e94600]"
               }`}
             >
@@ -288,13 +423,26 @@ function ExplorePost({ post, user }) {
           )}
 
           {post.caption && (
-            <p className="whitespace-pre-wrap break-words text-sm leading-5 text-[#686A72] [overflow-wrap:anywhere]">
-              {post.caption}
-            </p>
+            <div>
+              <p className="whitespace-pre-wrap break-words text-sm leading-5 text-[#686A72] dark:text-neutral-300 [overflow-wrap:anywhere]">
+                {post.caption.length > 20 && !expandedCaption
+                  ? `${post.caption.slice(0, 20)}...`
+                  : post.caption}
+              </p>
+              {post.caption.length > 20 && (
+                <button
+                  type="button"
+                  onClick={() => setExpandedCaption((prev) => !prev)}
+                  className="mt-0.5 text-xs font-semibold text-[#FF4D00] hover:underline cursor-pointer"
+                >
+                  {expandedCaption ? "less" : "read more"}
+                </button>
+              )}
+            </div>
           )}
 
           {post.createdAt && (
-            <p className="text-xs text-[#9A9CA3]">
+            <p className="text-xs text-[#9A9CA3] dark:text-neutral-500">
               {new Date(post.createdAt).toLocaleDateString()}
             </p>
           )}
@@ -313,7 +461,7 @@ function ExplorePost({ post, user }) {
             disabled={likeLoading}
             title="Like"
             aria-label={isLiked ? "Unlike post" : "Like post"}
-            className="flex flex-col items-center gap-1 text-[#1B1C20] transition hover:text-[#FF4D00] disabled:opacity-50"
+            className="flex flex-col items-center gap-1 text-[#1B1C20] dark:text-white transition hover:text-[#FF4D00] disabled:opacity-50"
           >
             <Heart
               size={25}
@@ -327,7 +475,7 @@ function ExplorePost({ post, user }) {
             onClick={() => setOpenComment(true)}
             title="Comments"
             aria-label="Open comments"
-            className="flex flex-col items-center gap-1 text-[#1B1C20] transition hover:text-[#FF4D00]"
+            className="flex flex-col items-center gap-1 text-[#1B1C20] dark:text-white transition hover:text-[#FF4D00]"
           >
             <MessageCircle size={24} />
             <span className="text-xs">{commentCount}</span>
@@ -335,20 +483,20 @@ function ExplorePost({ post, user }) {
 
           <button
             type="button"
-            onClick={handleShare}
+            onClick={() => setShareOpen(true)}
             title="Repost or share"
             aria-label="Repost or share"
-            className="text-[#1B1C20] transition hover:text-[#FF4D00]"
+            className="text-[#1B1C20] dark:text-white transition hover:text-[#FF4D00]"
           >
             <Repeat2 size={23} />
           </button>
 
           <button
             type="button"
-            onClick={handleShare}
+            onClick={() => setShareOpen(true)}
             title="Send"
             aria-label="Send post"
-            className="text-[#1B1C20] transition hover:text-[#FF4D00]"
+            className="text-[#1B1C20] dark:text-white transition hover:text-[#FF4D00]"
           >
             <Send size={23} />
           </button>
@@ -362,7 +510,7 @@ function ExplorePost({ post, user }) {
             className={`transition disabled:opacity-50 ${
               isBookmarked
                 ? "text-[#FF4D00]"
-                : "text-[#1B1C20] hover:text-[#FF4D00]"
+                : "text-[#1B1C20] dark:text-white hover:text-[#FF4D00]"
             }`}
           >
             <Bookmark
@@ -371,23 +519,27 @@ function ExplorePost({ post, user }) {
             />
           </button>
 
+          {/* Three-dot More menu trigger */}
           <button
             type="button"
-            onClick={() => navigate(`/post/${postId}`)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setMoreOpen(true);
+            }}
             title="More options"
             aria-label="More post options"
-            className="text-[#1B1C20] transition hover:text-[#FF4D00]"
+            className="text-[#1B1C20] dark:text-white transition hover:text-[#FF4D00]"
           >
             <MoreHorizontal size={25} />
           </button>
         </aside>
 
-        {/* Small-screen author information, kept outside the media */}
+        {/* Small-screen author information */}
         <div className="absolute bottom-4 left-3 z-10 flex max-w-[35vw] items-center gap-2 lg:hidden">
           <button
             type="button"
             onClick={handleProfileClick}
-            className="truncate text-left text-xs font-semibold text-[#1B1C20]"
+            className="truncate text-left text-xs font-semibold text-[#1B1C20] dark:text-white"
           >
             @{author?.username || "user"}
           </button>
@@ -405,11 +557,108 @@ function ExplorePost({ post, user }) {
         </div>
       </section>
 
+      {/* Three-dot More Menu Dialog */}
+      <Dialog open={moreOpen} onOpenChange={setMoreOpen}>
+        <DialogContent
+          showCloseButton={false}
+          className="flex max-w-[300px] flex-col items-center gap-0 overflow-hidden rounded-2xl border border-[#E4E1DB] bg-white p-0 text-center text-sm shadow-2xl dark:border-[#262626] dark:bg-[#1a1a1a] dark:text-white"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              setMoreOpen(false);
+              setReportOpen(true);
+            }}
+            className="w-full border-b border-[#E4E1DB] py-3.5 font-bold text-red-500 transition hover:bg-black/5 dark:border-[#262626] dark:hover:bg-white/5"
+          >
+            Report
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setMoreOpen(false);
+              handleBookmark();
+            }}
+            className="w-full border-b border-[#E4E1DB] py-3.5 font-medium transition hover:bg-black/5 dark:border-[#262626] dark:hover:bg-white/5"
+          >
+            {isBookmarked ? "Remove bookmark" : "Bookmark"}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleCopyLink}
+            className="w-full border-b border-[#E4E1DB] py-3.5 font-medium transition hover:bg-black/5 dark:border-[#262626] dark:hover:bg-white/5"
+          >
+            Copy link
+          </button>
+
+          {!isOwnPost && isFollowing && (
+            <button
+              type="button"
+              onClick={() => {
+                setMoreOpen(false);
+                handleFollow();
+              }}
+              className="w-full border-b border-[#E4E1DB] py-3.5 font-bold text-red-500 transition hover:bg-black/5 dark:border-[#262626] dark:hover:bg-white/5"
+            >
+              Unfollow
+            </button>
+          )}
+
+          {isOwnPost && (
+            <button
+              type="button"
+              onClick={handleDeletePost}
+              className="w-full border-b border-[#E4E1DB] py-3.5 font-bold text-red-500 transition hover:bg-black/5 dark:border-[#262626] dark:hover:bg-white/5"
+            >
+              Delete
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setMoreOpen(false)}
+            className="w-full py-3.5 font-normal text-[#686A72] transition hover:bg-black/5 dark:text-neutral-400 dark:hover:bg-white/5"
+          >
+            Cancel
+          </button>
+        </DialogContent>
+      </Dialog>
+
+      {/* Comment Dialog */}
       <CommentDialog
         openComment={openComment}
         setOpenComment={setOpenComment}
         post={post}
         onCommentAdded={handleCommentAdded}
+      />
+
+      {/* Share Dialog */}
+      <SharePostDialog
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+        postUrl={`${window.location.origin}/post/${postId}`}
+        postCaption={post?.caption || ""}
+        postId={postId}
+      />
+
+      {/* Report Dialog */}
+      <ReportDialog
+        open={reportOpen}
+        onOpenChange={setReportOpen}
+        contact={author}
+        onSubmit={async ({ reason, details }) => {
+          try {
+            const res = await reportUser(authorId, { reason, details });
+            if (res?.success) {
+              toast.success("Report submitted successfully. Thank you.");
+            }
+          } catch (err) {
+            toast.error(err.response?.data?.message || "Failed to submit report.");
+          }
+        }}
       />
     </>
   );
@@ -461,15 +710,15 @@ export default function Explore() {
 
   if (loading) {
     return (
-      <main className="flex h-[100dvh] items-center justify-center bg-white">
-        <p className="text-sm text-[#686A72]">Loading posts...</p>
+      <main className="flex h-[100dvh] items-center justify-center bg-white dark:bg-black">
+        <p className="text-sm text-[#686A72] dark:text-neutral-400">Loading posts...</p>
       </main>
     );
   }
 
   if (error) {
     return (
-      <main className="flex h-[100dvh] items-center justify-center bg-white px-6">
+      <main className="flex h-[100dvh] items-center justify-center bg-white dark:bg-black px-6">
         <div className="text-center">
           <p className="mb-4 text-sm text-red-600">{error}</p>
           <button
@@ -486,12 +735,12 @@ export default function Explore() {
 
   if (!posts.length) {
     return (
-      <main className="flex h-[100dvh] items-center justify-center bg-white px-6">
+      <main className="flex h-[100dvh] items-center justify-center bg-white dark:bg-black px-6">
         <div className="text-center">
-          <h2 className="mb-2 text-xl font-semibold text-[#1B1C20]">
+          <h2 className="mb-2 text-xl font-semibold text-[#1B1C20] dark:text-white">
             Nothing to explore yet
           </h2>
-          <p className="text-sm text-[#686A72]">
+          <p className="text-sm text-[#686A72] dark:text-neutral-400">
             Posts will appear here when they are available in your feed.
           </p>
         </div>
@@ -501,7 +750,7 @@ export default function Explore() {
 
   return (
     <main
-      className="h-[100dvh] w-full snap-y snap-mandatory overflow-y-auto overscroll-y-contain scroll-smooth bg-white"
+      className="h-[100dvh] w-full snap-y snap-mandatory overflow-y-auto overscroll-y-contain scroll-smooth bg-white dark:bg-black"
       aria-label="Explore feed"
     >
       {posts.map((post) => (

@@ -7,8 +7,13 @@ const ProtectedRoute = () => {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <p className="text-orange-500">Loading Nexo...</p>
+      <div className="flex min-h-screen items-center justify-center bg-[#F7F6F3] dark:bg-black">
+        <div className="flex flex-col items-center gap-3">
+          <div className="size-12 animate-pulse">
+            <img src="/logo.png" alt="Nexo" className="size-full object-contain" />
+          </div>
+          <p className="text-sm font-medium text-[#FF4D00]">Loading Nexo...</p>
+        </div>
       </div>
     );
   }
@@ -16,7 +21,7 @@ const ProtectedRoute = () => {
   if (!user) {
     return (
       <Navigate
-        to="/login"
+        to="/"
         replace
         state={{ from: location }}
       />

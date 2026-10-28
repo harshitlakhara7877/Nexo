@@ -17,7 +17,7 @@ const messageSchema = new mongoose.Schema(
     // Identifies which kind of message this is.
     type: {
       type: String,
-      enum: ["text", "image", "voice", "sticker"],
+      enum: ["text", "image", "voice", "sticker", "share"],
       default: "text",
       required: true,
     },
@@ -28,6 +28,32 @@ const messageSchema = new mongoose.Schema(
       trim: true,
       maxlength: 2000,
       default: "",
+    },
+
+    // Structured metadata for shared posts/content.
+    sharedContent: {
+      url: {
+        type: String,
+        trim: true,
+      },
+      domain: {
+        type: String,
+        trim: true,
+      },
+      caption: {
+        type: String,
+        trim: true,
+        default: "",
+      },
+      postId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Post",
+      },
+      message: {
+        type: String,
+        trim: true,
+        default: "",
+      },
     },
 
     // Metadata for image messages.
@@ -89,6 +115,10 @@ const messageSchema = new mongoose.Schema(
 messageSchema.pre("validate", function () {
   if (this.type === "text" && !this.message?.trim()) {
     this.invalidate("message", "Text message is required.");
+  }
+
+  if (this.type === "share" && !this.sharedContent?.url) {
+    this.invalidate("sharedContent.url", "Shared content URL is required.");
   }
 
   if (this.type === "image" && !this.image?.url) {

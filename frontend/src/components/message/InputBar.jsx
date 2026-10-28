@@ -368,7 +368,7 @@ export default function InputBar({
   return (
     <form
       onSubmit={handleSend}
-      className="relative shrink-0 sm:px-5 sm:py-4"
+      className="relative shrink-0 sm:px-5 sm:py-4 dark:bg-black"
     >
       {/* Image and voice previews */}
       {(imagePreview || audioPreview) && (
@@ -378,7 +378,7 @@ export default function InputBar({
               <img
                 src={imagePreview}
                 alt="Selected image preview"
-                className="size-20 rounded-lg border border-[#E4E1DB] object-cover"
+                className="size-20 rounded-lg border border-[#E4E1DB] dark:border-[#262626] object-cover"
               />
 
               <button
@@ -393,7 +393,7 @@ export default function InputBar({
           )}
 
           {audioPreview && (
-            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-[#E4E1DB] bg-[#F7F6F3] p-2">
+            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-[#E4E1DB] dark:border-[#262626] bg-[#F7F6F3] dark:bg-[#1C1C1E] p-2">
               <audio
                 controls
                 src={audioPreview}
@@ -407,7 +407,7 @@ export default function InputBar({
                   setAudioDuration(0);
                 }}
                 aria-label="Remove voice recording"
-                className="flex size-8 shrink-0 items-center justify-center rounded-full text-[#686A72] hover:bg-white hover:text-[#FF4D00]"
+                className="flex size-8 shrink-0 items-center justify-center rounded-full text-[#686A72] dark:text-neutral-400 hover:bg-white dark:hover:bg-[#202020] hover:text-[#FF4D00]"
               >
                 <X size={17} />
               </button>
@@ -418,8 +418,8 @@ export default function InputBar({
 
       {/* Recording status */}
       {isRecording && (
-        <div className="mx-auto mb-3 flex max-w-4xl items-center justify-between rounded-xl border border-red-200 bg-red-50 px-3 py-2">
-          <div className="flex items-center gap-2 text-sm text-red-600">
+        <div className="mx-auto mb-3 flex max-w-4xl items-center justify-between rounded-xl border border-red-200 bg-red-50 dark:border-red-900/50 dark:bg-red-950/40 px-3 py-2">
+          <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
             <span className="size-2 animate-pulse rounded-full bg-red-500" />
             Recording voice message
             <span className="font-mono">
@@ -431,7 +431,7 @@ export default function InputBar({
             <button
               type="button"
               onClick={cancelRecording}
-              className="rounded-lg px-3 py-1.5 text-sm text-[#686A72] hover:bg-white"
+              className="rounded-lg px-3 py-1.5 text-sm text-[#686A72] dark:text-neutral-400 hover:bg-white dark:hover:bg-[#202020]"
             >
               Cancel
             </button>
@@ -447,7 +447,7 @@ export default function InputBar({
         </div>
       )}
 
-      <div className="relative mx-auto flex w-full items-end gap-2 rounded-2xl border border-[#E4E1DB] bg-white p-2">
+      <div className="relative mx-auto flex w-full items-end gap-2 rounded-2xl border border-[#E4E1DB] bg-white dark:border-[#262626] dark:bg-[#121212] p-2">
         {/* Emoji picker */}
         {showEmojiPicker && (
           <div className="absolute bottom-full left-0 z-30 mb-3">
@@ -470,9 +470,9 @@ export default function InputBar({
 
         {/* Sticker picker */}
         {showStickerPicker && (
-          <div className="absolute bottom-full right-0 z-30 mb-3 w-72 rounded-2xl border border-[#E4E1DB] bg-white p-3 shadow-xl">
+          <div className="absolute bottom-full right-0 z-30 mb-3 w-72 rounded-2xl border border-[#E4E1DB] bg-white dark:border-[#262626] dark:bg-[#181818] p-3 shadow-xl">
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-[#1B1C20]">
+              <h3 className="text-sm font-semibold text-[#1B1C20] dark:text-white">
                 Stickers
               </h3>
 
@@ -480,7 +480,7 @@ export default function InputBar({
                 type="button"
                 onClick={() => setShowStickerPicker(false)}
                 aria-label="Close sticker picker"
-                className="flex size-7 items-center justify-center rounded-full text-[#686A72] hover:bg-[#F7F6F3]"
+                className="flex size-7 items-center justify-center rounded-full text-[#686A72] dark:text-neutral-400 hover:bg-[#F7F6F3] dark:hover:bg-[#202020]"
               >
                 <X size={16} />
               </button>
@@ -495,7 +495,7 @@ export default function InputBar({
                   onClick={() => handleSendSticker(sticker)}
                   aria-label={`Send ${sticker.label} sticker`}
                   title={sticker.label}
-                  className="flex aspect-square items-center justify-center rounded-xl text-3xl transition hover:scale-110 hover:bg-[#FFF0E8] disabled:opacity-40"
+                  className="flex aspect-square items-center justify-center rounded-xl text-3xl transition hover:scale-110 hover:bg-[#FFF0E8] dark:hover:bg-[#2A180E] disabled:opacity-40"
                 >
                   {sticker.emoji}
                 </button>
@@ -513,8 +513,8 @@ export default function InputBar({
             setShowEmojiPicker((open) => !open);
             setShowStickerPicker(false);
           }}
-          className={`flex size-10 shrink-0 items-center justify-center rounded-xl transition hover:bg-[#FFF0E8] hover:text-[#FF4D00] ${
-            showEmojiPicker ? "text-[#FF4D00]" : "text-[#1B1C20]"
+          className={`flex size-10 shrink-0 items-center justify-center rounded-xl transition hover:bg-[#FFF0E8] dark:hover:bg-[#2A180E] hover:text-[#FF4D00] ${
+            showEmojiPicker ? "text-[#FF4D00]" : "text-[#1B1C20] dark:text-white"
           }`}
         >
           <Smile size={22} strokeWidth={1.8} />
@@ -548,7 +548,7 @@ export default function InputBar({
               : "Write a message..."
           }
           aria-label="Write a message"
-          className="max-h-32 min-h-10 flex-1 resize-y bg-transparent px-2 py-3 text-sm leading-5 text-[#1B1C20] outline-none placeholder:text-[#9A9CA3]"
+          className="max-h-32 min-h-10 flex-1 resize-y bg-transparent px-2 py-3 text-sm leading-5 text-[#1B1C20] dark:text-white outline-none placeholder:text-[#9A9CA3] dark:placeholder:text-neutral-500"
         />
 
         {/* Send button */}
@@ -577,8 +577,8 @@ export default function InputBar({
                 isRecording ? "Stop recording" : "Record voice message"
               }
               title={isRecording ? "Stop recording" : "Voice message"}
-              className={`flex size-10 items-center justify-center rounded-xl transition hover:bg-[#FFF0E8] hover:text-[#FF4D00] ${
-                isRecording ? "text-red-500" : "text-[#1B1C20]"
+              className={`flex size-10 items-center justify-center rounded-xl transition hover:bg-[#FFF0E8] dark:hover:bg-[#2A180E] hover:text-[#FF4D00] ${
+                isRecording ? "text-red-500" : "text-[#1B1C20] dark:text-white"
               }`}
             >
               {isRecording ? (
@@ -603,7 +603,7 @@ export default function InputBar({
               onClick={() => imageInputRef.current?.click()}
               aria-label="Attach image"
               title="Attach image"
-              className="flex size-10 items-center justify-center rounded-xl text-[#1B1C20] transition hover:bg-[#FFF0E8] hover:text-[#FF4D00] disabled:opacity-40"
+              className="flex size-10 items-center justify-center rounded-xl text-[#1B1C20] dark:text-white transition hover:bg-[#FFF0E8] dark:hover:bg-[#2A180E] hover:text-[#FF4D00] disabled:opacity-40"
             >
               <ImageIcon size={22} strokeWidth={1.8} />
             </button>
@@ -618,8 +618,8 @@ export default function InputBar({
               }}
               aria-label="Open sticker picker"
               title="Stickers"
-              className={`flex size-10 items-center justify-center rounded-xl transition hover:bg-[#FFF0E8] hover:text-[#FF4D00] ${
-                showStickerPicker ? "text-[#FF4D00]" : "text-[#1B1C20]"
+              className={`flex size-10 items-center justify-center rounded-xl transition hover:bg-[#FFF0E8] dark:hover:bg-[#2A180E] hover:text-[#FF4D00] ${
+                showStickerPicker ? "text-[#FF4D00]" : "text-[#1B1C20] dark:text-white"
               }`}
             >
               <Sticker size={22} strokeWidth={1.8} />
@@ -628,7 +628,7 @@ export default function InputBar({
         )}
       </div>
 
-      <p className="mx-auto mt-2 max-w-4xl px-1 text-[11px] text-[#9A9CA3]">
+      <p className="mx-auto mt-2 max-w-4xl px-1 text-[11px] text-[#9A9CA3] dark:text-neutral-500">
         Enter to send · Shift + Enter for a new line
       </p>
     </form>

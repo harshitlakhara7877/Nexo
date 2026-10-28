@@ -11,6 +11,7 @@ import {
 
 import ProfileHeader from "../components/profile/ProfileHeader";
 import ProfileTabs from "../components/profile/ProfileTabs";
+import FollowersFollowingDialog from "../components/profile/FollowersFollowingDialog";
 
 const Profile = () => {
   const { user, setUser } = useAuth();
@@ -20,6 +21,9 @@ const Profile = () => {
   const [posts, setPosts] = useState([]);
   const [likedPosts, setLikedPosts] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogTab, setDialogTab] = useState("followers");
 
   useEffect(() => {
     let cancelled = false;
@@ -94,15 +98,15 @@ const Profile = () => {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-[#F7F6F3] px-4 py-6 sm:px-6 lg:px-8">
+      <main className="min-h-screen bg-[#F7F6F3] dark:bg-black px-4 py-6 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-4xl space-y-6">
-          <div className="h-64 animate-pulse rounded-2xl bg-white" />
+          <div className="h-64 animate-pulse rounded-2xl bg-white dark:bg-[#181818]" />
 
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {Array.from({ length: 6 }).map((_, index) => (
               <div
                 key={index}
-                className="aspect-square animate-pulse rounded-xl bg-white"
+                className="aspect-square animate-pulse rounded-xl bg-white dark:bg-[#181818]"
               />
             ))}
           </div>
@@ -113,9 +117,9 @@ const Profile = () => {
 
   if (!profile) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#F7F6F3]">
+      <main className="flex min-h-screen items-center justify-center bg-[#F7F6F3] dark:bg-black">
         <div className="text-center">
-          <p className="mb-4 text-sm text-[#686A72]">
+          <p className="mb-4 text-sm text-[#686A72] dark:text-neutral-400">
             Unable to load your profile.
           </p>
 
@@ -132,15 +136,15 @@ const Profile = () => {
   }
 
   return (
-    <main className="min-h-screen bg-[#F7F6F3] px-4 py-6 sm:px-6 lg:px-8">
+    <main className="min-h-screen bg-[#F7F6F3] dark:bg-black px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-4xl">
         {/* Page heading */}
         <div className="mb-5">
-          <h1 className="text-2xl font-semibold tracking-tight text-[#1B1C20]">
+          <h1 className="text-2xl font-semibold tracking-tight text-[#1B1C20] dark:text-white">
             Profile
           </h1>
 
-          <p className="mt-1 text-sm text-[#686A72]">
+          <p className="mt-1 text-sm text-[#686A72] dark:text-neutral-400">
             Manage your profile, posts, and liked content.
           </p>
         </div>
@@ -149,6 +153,14 @@ const Profile = () => {
         <ProfileHeader
           user={profile}
           onSettings={() => navigate("/settings")}
+          onFollowersClick={() => {
+            setDialogTab("followers");
+            setDialogOpen(true);
+          }}
+          onFollowingClick={() => {
+            setDialogTab("following");
+            setDialogOpen(true);
+          }}
         />
 
         {/* Reusable profile tabs */}
@@ -156,6 +168,28 @@ const Profile = () => {
           posts={posts}
           likedPosts={likedPosts}
           showLikedTab={true}
+        />
+
+        {/* Followers / Following Dialog */}
+        <FollowersFollowingDialog
+          isOpen={dialogOpen}
+          onClose={() => setDialogOpen(false)}
+          userId={profile?._id}
+          initialTab={dialogTab}
+          isOwnProfile={true}
+          onStatsChange={async () => {
+            const profileResponse = await getCurrentUser();
+            if (profileResponse?.success && profileResponse.user) {
+              setProfile((prev) => ({
+                ...prev,
+                ...profileResponse.user,
+              }));
+              setUser((prev) => ({
+                ...prev,
+                ...profileResponse.user,
+              }));
+            }
+          }}
         />
       </div>
     </main>

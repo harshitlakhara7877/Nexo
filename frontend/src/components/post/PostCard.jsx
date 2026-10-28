@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import {
   Bookmark,
   Heart,
@@ -9,11 +9,21 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import CommentDialog from "./CommentDialog";
 import { useNavigate } from "react-router-dom";
-import { likePost, dislikePost, addComment, toggleBookmark } from "@/services/postService";
+import {
+  likePost,
+  dislikePost,
+  addComment,
+  toggleBookmark,
+  deletePost,
+} from "@/services/postService";
+import { reportUser } from "@/services/messageService";
+import { followOrUnfollow } from "@/services/userService";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogTrigger } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { useAuth } from "@/context/AuthContext";
+import SharePostDialog from "./SharePostDialog";
+import ReportDialog from "@/components/message/ReportDialog";
 
 const PostCard = ({ post }) => {
   const navigate = useNavigate();
@@ -40,28 +50,90 @@ const PostCard = ({ post }) => {
 
   const [commentCount, setCommentCount] = useState(post?.comments?.length || 0);
 
+  const [shareOpen, setShareOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+
   const [openComment, setOpenComment] = useState(false);
 
   const [quickComment, setQuickComment] = useState("");
 
   const [quickCommentLoading, setQuickCommentLoading] = useState(false);
 
-  // Keep local state in sync when post/user changes
-  useEffect(() => {
-    setIsLiked(
-      post?.likes?.some(
-        (userId) => userId?.toString() === user?._id?.toString(),
-      ) || false,
-    );
-    setIsBookmarked(
-      post?.bookmarks?.some(
-        (userId) => userId?.toString() === user?._id?.toString(),
-      ) || false,
-    );
-    setLikeCount(post?.likes?.length || 0);
+  const [expandedCaption, setExpandedCaption] = useState(false);
 
-    setCommentCount(post?.comments?.length || 0);
-  }, [post, user]);
+  const isVideo = Boolean(
+    post?.mediaType === "video" ||
+      post?.image?.url?.match(/\.(mp4|mov|webm|m4v)($|\?)/i)
+  );
+  const videoRef = useRef(null);
+
+  // Autoplay video on home feed when scrolled into view; turn off when comment dialog is open
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !isVideo) return;
+
+    if (openComment) {
+      video.pause();
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting && !openComment) {
+            video.play().catch(() => {
+              // Browser policy may require muted for autoplay
+              video.muted = true;
+              video.play().catch(() => {});
+            });
+          } else {
+            video.pause();
+          }
+        });
+      },
+      { threshold: 0.5 }
+    );
+
+    observer.observe(video);
+
+    return () => {
+      observer.disconnect();
+      video.pause();
+    };
+  }, [isVideo, openComment, post?.image?.url]);
+
+  // Keep local state in sync when post/user changes
+  const currentUserId = String(user?._id ?? "");
+
+  const postUrl = post?._id ? `${window.location.origin}/post/${post._id}` : "";
+
+  const postIsLiked = Boolean(
+    post?.likes?.some((item) => String(item?._id ?? item) === currentUserId),
+  );
+
+  const postIsBookmarked = Boolean(
+    post?.bookmarks?.some(
+      (item) => String(item?._id ?? item) === currentUserId,
+    ),
+  );
+
+  const postLikeCount = post?.likes?.length ?? 0;
+  const postCommentCount = post?.comments?.length ?? 0;
+
+  useEffect(() => {
+    setIsLiked(postIsLiked);
+    setIsBookmarked(postIsBookmarked);
+    setLikeCount(postLikeCount);
+    setCommentCount(postCommentCount);
+  }, [
+    post?._id,
+    currentUserId,
+    postIsLiked,
+    postIsBookmarked,
+    postLikeCount,
+    postCommentCount,
+  ]);
 
   // ================= LIKE =================
 
@@ -70,24 +142,44 @@ const PostCard = ({ post }) => {
 
     if (likeLoading || !post?._id) return;
 
+    const action = isLiked ? "dislike" : "like";
+
+    console.log("[LIKE UI] Sending request", {
+      postId: post._id,
+      action,
+      isLikedBeforeRequest: isLiked,
+    });
+
     try {
       setLikeLoading(true);
 
-      const response = isLiked
-        ? await dislikePost(post._id)
-        : await likePost(post._id);
+      const response =
+        action === "dislike"
+          ? await dislikePost(post._id)
+          : await likePost(post._id);
+
+      console.log("[LIKE UI] API response", {
+        action,
+        success: response?.success,
+        isLiked: response?.isLiked,
+        likeCount: response?.likeCount,
+      });
 
       if (!response?.success) {
         throw new Error(response?.message || "Failed to update like");
       }
 
-      console.log("Like Response", response);
-      toast.success(response.message)
-
       setIsLiked(response.isLiked);
       setLikeCount(response.likeCount);
+
+      toast.success(response.message);
     } catch (error) {
-      console.error("Like error:", error);
+      console.error("[LIKE UI] Request failed", {
+        action,
+        message: error.message,
+        status: error.response?.status,
+        response: error.response?.data,
+      });
 
       toast.error(
         error.response?.data?.message ||
@@ -110,45 +202,52 @@ const PostCard = ({ post }) => {
     setCommentCount((previousCount) => previousCount + 1);
   };
 
+  // const handleShare = async (event) => {
+  //   event.stopPropagation();
 
-  const handleShare = async (event) => {
-  event.stopPropagation();
+  //   if (!post?._id) return;
 
-  if (!post?._id) return;
+  //   const shareUrl = `${window.location.origin}/post/${post._id}`;
 
-  const shareUrl =
-    `${window.location.origin}/post/${post._id}`;
+  //   const shareData = {
+  //     title: `Post by @${author?.username || "user"}`,
+  //     text: post.caption || "Check out this post on Nexo.",
+  //     url: shareUrl,
+  //   };
 
-  const shareData = {
-    title: `Post by @${author?.username || "user"}`,
-    text: post.caption || "Check out this post on Nexo.",
-    url: shareUrl,
+  //   try {
+  //     // Use the device's native share menu when supported.
+  //     if (typeof navigator.share === "function") {
+  //       await navigator.share(shareData);
+  //       return;
+  //     }
+
+  //     // Desktop and unsupported-browser fallback.
+  //     if (navigator.clipboard?.writeText) {
+  //       await navigator.clipboard.writeText(shareUrl);
+  //       toast.success("Post link copied");
+  //       return;
+  //     }
+
+  //     // Last fallback for browsers without clipboard access.
+  //     window.prompt("Copy this post link:", shareUrl);
+  //   } catch (error) {
+  //     // Closing the native share menu isn't an actual failure.
+  //     if (error.name === "AbortError") return;
+
+  //     console.error("Share error:", error);
+  //     toast.error("Couldn't share this post");
+  //   }
+  // };
+
+  const handleShare = (event) => {
+    event.stopPropagation();
+    if (!post?._id) {
+      toast.error("Post link is unavailable");
+      return;
+    }
+    setShareOpen(true);
   };
-
-  try {
-    // Use the device's native share menu when supported.
-    if (typeof navigator.share === "function") {
-      await navigator.share(shareData);
-      return;
-    }
-
-    // Desktop and unsupported-browser fallback.
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(shareUrl);
-      toast.success("Post link copied");
-      return;
-    }
-
-    // Last fallback for browsers without clipboard access.
-    window.prompt("Copy this post link:", shareUrl);
-  } catch (error) {
-    // Closing the native share menu isn't an actual failure.
-    if (error.name === "AbortError") return;
-
-    console.error("Share error:", error);
-    toast.error("Couldn't share this post");
-  }
-};
 
   const handleBookmark = async (event) => {
     event.stopPropagation();
@@ -165,7 +264,7 @@ const PostCard = ({ post }) => {
       }
 
       console.log("Bookmark Response", response);
-      toast.success(response.message)
+      toast.success(response.message);
 
       setIsBookmarked(response.isBookmarked);
     } catch (error) {
@@ -276,63 +375,153 @@ const PostCard = ({ post }) => {
 
           {/* ================= MORE ================= */}
 
-          <Dialog>
-            <DialogTrigger>
-              <MoreHorizontal size={21} />
+          <Dialog open={moreOpen} onOpenChange={setMoreOpen}>
+            <DialogTrigger asChild>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMoreOpen(true);
+                }}
+                className="cursor-pointer text-[#686A72] hover:text-[#1B1C20] dark:text-neutral-400 dark:hover:text-white"
+              >
+                <MoreHorizontal size={21} />
+              </button>
             </DialogTrigger>
 
             <DialogContent
               showCloseButton={false}
-              className="flex flex-col items-center text-center text-sm"
+              className="flex max-w-[300px] flex-col items-center gap-0 overflow-hidden rounded-2xl border border-[#E4E1DB] bg-white p-0 text-center text-sm shadow-2xl dark:border-[#262626] dark:bg-[#1a1a1a] dark:text-white"
               onClick={(event) => event.stopPropagation()}
             >
-              <Button
-                variant="ghost"
-                className="cursor-pointer font-bold text-orange-600"
+              <button
+                type="button"
+                onClick={() => {
+                  setMoreOpen(false);
+                  setReportOpen(true);
+                }}
+                className="w-full border-b border-[#E4E1DB] py-3.5 font-bold text-red-500 transition hover:bg-black/5 dark:border-[#262626] dark:hover:bg-white/5"
               >
-                Unfollow
-              </Button>
+                Report
+              </button>
 
-              <Button
-                variant="ghost"
-                className="cursor-pointer font-bold text-orange-600"
+              <button
+                type="button"
+                onClick={(e) => {
+                  setMoreOpen(false);
+                  handleBookmark(e);
+                }}
+                className="w-full border-b border-[#E4E1DB] py-3.5 font-medium transition hover:bg-black/5 dark:border-[#262626] dark:hover:bg-white/5"
               >
-                Add to favorite
-              </Button>
+                {isBookmarked ? "Remove bookmark" : "Bookmark"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMoreOpen(false);
+                  if (postUrl) {
+                    navigator.clipboard.writeText(postUrl);
+                    toast.success("Link copied to clipboard");
+                  }
+                }}
+                className="w-full border-b border-[#E4E1DB] py-3.5 font-medium transition hover:bg-black/5 dark:border-[#262626] dark:hover:bg-white/5"
+              >
+                Copy link
+              </button>
+
+              {user?._id?.toString() !== author?._id?.toString() && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setMoreOpen(false);
+                    if (author?._id) {
+                      await followOrUnfollow(author._id);
+                      toast.success("Follow status updated");
+                    }
+                  }}
+                  className="w-full border-b border-[#E4E1DB] py-3.5 font-bold text-red-500 transition hover:bg-black/5 dark:border-[#262626] dark:hover:bg-white/5"
+                >
+                  Unfollow
+                </button>
+              )}
 
               {user?._id?.toString() === author?._id?.toString() && (
-                <Button
-                  variant="ghost"
-                  className="cursor-pointer font-bold text-orange-600"
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setMoreOpen(false);
+                    try {
+                      await deletePost(post._id);
+                      toast.success("Post deleted");
+                      window.location.reload();
+                    } catch (err) {
+                      toast.error("Failed to delete post");
+                    }
+                  }}
+                  className="w-full border-b border-[#E4E1DB] py-3.5 font-bold text-red-500 transition hover:bg-black/5 dark:border-[#262626] dark:hover:bg-white/5"
                 >
                   Delete
-                </Button>
+                </button>
               )}
+
+              <button
+                type="button"
+                onClick={() => setMoreOpen(false)}
+                className="w-full py-3.5 font-normal text-[#686A72] transition hover:bg-black/5 dark:text-neutral-400 dark:hover:bg-white/5"
+              >
+                Cancel
+              </button>
             </DialogContent>
           </Dialog>
         </div>
 
-        {/* ================= IMAGE ================= */}
+        {/* ================= MEDIA (IMAGE / VIDEO) ================= */}
 
         {post?.image?.url && (
           <div
-            className="mb-4 overflow-hidden rounded bg-[#F7F6F3] cursor-pointer"
-            onClick={handlePostClick}
+            className="mb-4 overflow-hidden rounded-xl bg-[#F7F6F3] dark:bg-black/30"
           >
-            <img
-              src={post.image.url}
-              alt={post.caption || `Post by @${author?.username}`}
-              className="max-h-[650px] w-full object-cover"
-            />
+            {post.mediaType === "video" || post.image.url.match(/\.(mp4|mov|webm|m4v)($|\?)/i) ? (
+              <video
+                ref={videoRef}
+                src={post.image.url}
+                controls
+                playsInline
+                loop
+                className="max-h-[650px] w-full object-contain bg-black"
+              />
+            ) : (
+              <div onClick={handlePostClick} className="cursor-pointer">
+                <img
+                  src={post.image.url}
+                  alt={post.caption || `Post by @${author?.username}`}
+                  className="max-h-[650px] w-full object-cover"
+                />
+              </div>
+            )}
           </div>
         )}
 
         {/* ================= CAPTION ================= */}
 
         {post?.caption && (
-          <p className="mb-4 text-sm leading-6 text-[#1B1C20]">
-            {post.caption}
-          </p>
+          <div className="mb-4">
+            <p className="text-sm leading-6 text-[#1B1C20] dark:text-neutral-200">
+              {post.caption.length > 20 && !expandedCaption
+                ? `${post.caption.slice(0, 20)}...`
+                : post.caption}
+            </p>
+            {post.caption.length > 20 && (
+              <button
+                type="button"
+                onClick={() => setExpandedCaption((prev) => !prev)}
+                className="mt-0.5 text-xs font-semibold text-[#FF4D00] hover:underline cursor-pointer"
+              >
+                {expandedCaption ? "less" : "read more"}
+              </button>
+            )}
+          </div>
         )}
 
         {/* ================= ACTIONS ================= */}
@@ -387,11 +576,14 @@ const PostCard = ({ post }) => {
             onClick={handleBookmark}
             className="flex h-10 w-10 items-center justify-center rounded-full transition hover:bg-[#F7F6F3]"
           >
-            <Bookmark 
-            size={21}
-            className={
-                  isBookmarked ? "fill-[#FF4D00] text-[#FF4D00]" : "text-[#1B1C20]"
-                } />
+            <Bookmark
+              size={21}
+              className={
+                isBookmarked
+                  ? "fill-[#FF4D00] text-[#FF4D00]"
+                  : "text-[#1B1C20]"
+              }
+            />
           </button>
         </div>
 
@@ -441,6 +633,32 @@ const PostCard = ({ post }) => {
           setLikeCount(newLikeCount);
         }}
         onCommentAdded={handleCommentAdded}
+      />
+
+      <SharePostDialog
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+        postUrl={postUrl}
+        postCaption={post?.caption || ""}
+        postId={post?._id}
+      />
+
+      <ReportDialog
+        open={reportOpen}
+        onOpenChange={setReportOpen}
+        contact={author}
+        onSubmit={async ({ reason, details }) => {
+          try {
+            if (author?._id) {
+              const res = await reportUser(author._id, { reason, details });
+              if (res?.success) {
+                toast.success("Report submitted successfully. Thank you.");
+              }
+            }
+          } catch (err) {
+            toast.error(err.response?.data?.message || "Failed to submit report.");
+          }
+        }}
       />
     </>
   );

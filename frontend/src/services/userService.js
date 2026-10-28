@@ -34,3 +34,33 @@ export const searchUsers = async(query, page=1, limit=12, options={}) => {
   });
   return response.data;
 }
+
+export const getShareSuggestions = async () => {
+  const response = await api.get("/user/share-suggestions");
+  return response.data;
+};
+
+export const getUserFollowers = async (userIdOrUsername) => {
+  const response = await api.get(`/user/${userIdOrUsername}/followers`);
+  return response.data;
+};
+
+export const getUserFollowing = async (userIdOrUsername) => {
+  const response = await api.get(`/user/${userIdOrUsername}/following`);
+  return response.data;
+};
+
+export const removeFollower = async (targetUserId) => {
+  const response = await api.post(`/user/${targetUserId}/remove-follower`);
+  return response.data;
+};
+
+export const blockUser = async (userId) => {
+  const response = await api.post(`/user/block/${userId}`);
+  return response.data;
+};
+
+export const getBlockedUsers = async () => {
+  const response = await api.get("/user/blocked");
+  return response.data;
+};

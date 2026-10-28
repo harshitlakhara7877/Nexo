@@ -8,6 +8,13 @@ const imageTypes = [
   "image/webp",
   "image/jpg",
 ];
+const videoTypes = [
+  "video/mp4",
+  "video/webm",
+  "video/quicktime",
+  "video/ogg",
+  "video/x-matroska",
+];
 const audioTypes = [
   "audio/webm",
   "audio/ogg",
@@ -18,24 +25,35 @@ const audioTypes = [
 ];
 
 const fileFilter = (req, file, cb) => {
-  
-
-  if (["image", "profilePicture"].includes(file.fieldname) && imageTypes.includes(file.mimetype)) {
-    return cb(null, true);
-  } 
-
-  if(file.fieldname === "audio" && audioTypes.includes(file.mimetype)) {
+  if (
+    ["image", "profilePicture", "media"].includes(file.fieldname) &&
+    (imageTypes.includes(file.mimetype) || videoTypes.includes(file.mimetype))
+  ) {
     return cb(null, true);
   }
-  return cb(new Error("Only JPEG, PNG, JPG, and WebP images are allowed"), false);
+
+  if (file.fieldname === "video" && videoTypes.includes(file.mimetype)) {
+    return cb(null, true);
+  }
+
+  if (file.fieldname === "audio" && audioTypes.includes(file.mimetype)) {
+    return cb(null, true);
+  }
+
+  return cb(
+    new Error(
+      "Only supported images (JPEG, PNG, JPG, WebP), audio, or video files are allowed."
+    ),
+    false
+  );
 };
 
 const upload = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5 MB
-    files:1
+    fileSize: 50 * 1024 * 1024, // 50 MB
+    files: 1,
   },
 });
 

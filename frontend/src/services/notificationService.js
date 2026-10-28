@@ -2,7 +2,8 @@ import api from "./api";
 
 export const getNotifications = async(page=1, limit=20, options={}) => {
     const response = await api.get("/notifications", {
-        params: {page,limit},
+        params: {page,limit,filter: options.filter || "all",},
+        
         signal:options.signal,
     });
     
@@ -18,7 +19,7 @@ export const getUnreadNotificationCount = async(options={}) => {
 }
 
 export const markNotificationRead = async(notificationId) => {
-    const response = await api.get(`/notifications/${notificationId}/read`)
+    const response = await api.patch(`/notifications/${notificationId}/read`)
     
     return response.data;
 }

@@ -73,7 +73,7 @@ function UserAvatar({ user }) {
   const name = getName(user);
 
   return (
-    <span className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#FFF0E8] font-semibold text-[#FF4D00]">
+    <span className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#FFF0E8] dark:bg-[#2A180E] font-semibold text-[#FF4D00]">
       {user?.profilePicture?.url ? (
         <img
           src={user.profilePicture.url}
@@ -102,6 +102,8 @@ export default function ChatWindow({
   const [sending, setSending] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
+  const [isMuted, setIsMuted] = useState(false);
+  const [isBlocked, setIsBlocked] = useState(false);
 
   const [showDetails, setShowDetails] = useState(false);
   const [showReportDialog, setShowReportDialog] = useState(false);
@@ -161,6 +163,8 @@ export default function ChatWindow({
       }
 
       setMessages(response.messages || []);
+      setIsMuted(Boolean(response.isMuted));
+      setIsBlocked(Boolean(response.isBlocked));
       onConversationUpdated();
     } catch (err) {
       console.error("Load messages error:", err);
@@ -733,7 +737,7 @@ export default function ChatWindow({
   return (
     <>
       <section
-        className={`relative flex h-full min-h-0 min-w-0 flex-1 overflow-hidden bg-white ${
+        className={`relative flex h-full min-h-0 min-w-0 flex-1 overflow-hidden bg-white dark:bg-black ${
           mobileChatOpen ? "flex" : "hidden md:flex"
         }`}
       >
@@ -775,15 +779,15 @@ export default function ChatWindow({
             </>
           ) : (
             <div className="flex h-full flex-col items-center justify-center px-6 text-center">
-              <span className="flex size-20 items-center justify-center rounded-3xl bg-[#FFF0E8] text-[#FF4D00]">
+              <span className="flex size-20 items-center justify-center rounded-3xl bg-[#FFF0E8] dark:bg-[#2A180E] text-[#FF4D00]">
                 <MessageCircle size={33} strokeWidth={1.6} />
               </span>
 
-              <h2 className="mt-5 text-xl font-semibold tracking-tight text-[#1B1C20]">
+              <h2 className="mt-5 text-xl font-semibold tracking-tight text-[#1B1C20] dark:text-white">
                 Your conversations, together
               </h2>
 
-              <p className="mt-2 max-w-sm text-sm leading-6 text-[#686A72]">
+              <p className="mt-2 max-w-sm text-sm leading-6 text-[#686A72] dark:text-neutral-400">
                 Choose a conversation or search for someone to start a private
                 chat.
               </p>
@@ -795,6 +799,10 @@ export default function ChatWindow({
         {selectedContact && showDetails && (
           <ChatDetails
             contact={selectedContact}
+            initialMuted={isMuted}
+            initialBlocked={isBlocked}
+            onMuteChanged={(val) => setIsMuted(val)}
+            onBlockChanged={(val) => setIsBlocked(val)}
             onClose={() => setShowDetails(false)}
             onReport={() => setShowReportDialog(true)}
             onDelete={() => setShowDeleteDialog(true)}
@@ -809,7 +817,7 @@ export default function ChatWindow({
           if (!open) setImageDialogUrl(null);
         }}
       >
-        <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto border-[#E4E1DB] bg-white p-3 sm:p-5">
+        <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto border-[#E4E1DB] dark:border-[#262626] bg-white dark:bg-[#181818] p-3 sm:p-5">
           <DialogTitle className="sr-only">Image preview</DialogTitle>
 
           {imageDialogUrl && (

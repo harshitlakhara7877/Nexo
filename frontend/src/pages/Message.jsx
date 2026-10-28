@@ -114,8 +114,8 @@ export default function Messages() {
   }, [searchParams, user?._id, setSearchParams]);
 
   return (
-    <main className="h-dvh w-full min-w-0 overflow-hidden bg-white">
-      <div className="flex h-full w-full min-w-0 overflow-hidden bg-white">
+    <main className="h-dvh w-full min-w-0 overflow-hidden bg-[#FAFAFA] dark:bg-black">
+      <div className="flex h-full w-full min-w-0 overflow-hidden bg-white dark:bg-black">
         <ConversationList
           selectedContact={selectedContact}
           onSelectContact={handleSelectContact}

@@ -1,5 +1,7 @@
 import mongoose from "mongoose";
 import Notification from "../models/Notification.js";
+import User from "../models/User.js";
+
 
 const MAX_LIMIT = 30;
 const DEFAULT_LIMIT = 20;
@@ -37,8 +39,52 @@ export const getNotifications = async (req, res) => {
     try {
         const { page, limit, skip } = getPagination(req.query);
 
+        const filterName =
+            typeof req.query.filter === "string"
+                ? req.query.filter
+                : "all";
+
+        const allowedFilters = [
+            "all",
+            "following",
+            "comments",
+            "follows",
+        ];
+
+        if (!allowedFilters.includes(filterName)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid notification filter.",
+            });
+        }
+
+        const filter = {
+            recipient: req.id,
+        };
+
+        if (filterName === "comments") {
+            filter.type = "comment";
+        } else if (filterName === "follows") {
+            filter.type = "follow";
+        } else if (filterName === "following") {
+            const user = await User.findById(req.id)
+                .select("following")
+                .lean();
+
+            if (!user) {
+                return res.status(404).json({
+                    success: false,
+                    message: "User not found.",
+                });
+            }
+
+            filter.sender = {
+                $in: user.following || [],
+            };
+        }
+
         const [notifications, unreadCount] = await Promise.all([
-            Notification.find({ recipient: req.id })
+            Notification.find(filter)
                 .sort({ createdAt: -1, _id: -1 })
                 .skip(skip)
                 .limit(limit + 1)
@@ -47,11 +93,12 @@ export const getNotifications = async (req, res) => {
                 .populate("comment", "text")
                 .populate(
                     "relatedMessage",
-                    "type message image audio sticker",
+                    "type message image audio sticker sharedContent",
                 )
                 .lean()
             ,
 
+            // Always count all unread notifications, regardless of tab.
             Notification.countDocuments({
                 recipient: req.id,
                 isRead: false,
@@ -147,6 +194,11 @@ export const markNotificationRead = async (req, res) => {
             recipient: req.id,
             isRead: false,
         });
+
+        req.app.get("io")?.to(`user:${String(req.id)}`).emit(
+            "notification:read",
+            {notificationId: String(req.params.id),unreadCount},
+        );
 
         return res.status(200).json({
             success: true,

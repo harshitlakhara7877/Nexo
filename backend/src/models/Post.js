@@ -7,10 +7,15 @@ const postSchema = new mongoose.Schema({
     required: true,
   },
   caption: {
-    type:String,
+    type: String,
     trim: true,
     maxlength: 600,
     default: "",
+  },
+  mediaType: {
+    type: String,
+    enum: ["image", "video"],
+    default: "image",
   },
   image: {
      url: {

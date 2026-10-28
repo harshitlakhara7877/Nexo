@@ -1,19 +1,12 @@
-import { useEffect, useState } from "react";
-import { getFeed } from "../services/postService";
-
 import PostFeed from "@/components/post/PostFeed";
+import StoriesRow from "@/components/story/StoriesRow";
 
 const Home = () => {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
   return (
-    <div className="p-6 ml-20">
-      <h1 className="text-2xl font-bold">
-        Home
-      </h1>
+    <div className="p-6 mr-80 max-lg:mr-0">
 
-      <div className="w-full flex flex-col mx-auto  justify-center max-w-2xl mt-6 space-y-6">
+      <div className="w-full flex flex-col mx-auto justify-center max-w-2xl mt-6 space-y-6">
+        <StoriesRow />
         <PostFeed />
       </div>
     </div>

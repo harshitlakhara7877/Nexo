@@ -67,23 +67,27 @@ export const register = async (req, res) => {
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
+    const identifier = (email || req.body.username || "").trim();
 
-    if (!email || !password) {
+    if (!identifier || !password) {
       return res.status(400).json({
-        message: "All field are required",
-        success: false
-      })
+        message: "All fields are required",
+        success: false,
+      });
     }
 
-    const normalizedEmail = email.trim().toLowerCase();
-
-    const user = await User.findOne({ email:normalizedEmail });
+    const user = await User.findOne({
+      $or: [
+        { email: identifier.toLowerCase() },
+        { username: identifier },
+      ],
+    });
 
     if (!user) {
       return res.status(400).json({
         message: "Invalid email or password",
-        success: false
-      })
+        success: false,
+      });
     }
 
     const passwordMatches = await bcrypt.compare(password, user.password);
@@ -91,8 +95,8 @@ export const login = async (req, res) => {
     if (!passwordMatches) {
       return res.status(400).json({
         message: "Invalid email or password",
-        success: false
-      })
+        success: false,
+      });
     }
 
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "7d" });
